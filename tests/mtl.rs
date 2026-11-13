@@ -293,8 +293,60 @@ fn library_round_trip_is_exact() {
     let text = include_str!("fixtures/mtl/basic.mtl");
     let mats = parse_mtl(text);
     assert_eq!(mats.len(), 2);
-    let again = parse_mtl(&write_material_lib(&mats, &MtlWriteOptions::default()));
+    let written = write_material_lib(&mats, &MtlWriteOptions::default());
+    let again = parse_mtl(&written);
     assert_eq!(again, mats);
+
+    // Equality alone would let -0.0 pass as 0.0; the README promises bits.
+    let components = |mats: &[Material]| {
+        let mut out = Vec::new();
+        for m in mats {
+            for rgb in [m.ambient, m.diffuse, m.specular, m.emissive]
+                .into_iter()
+                .flatten()
+            {
+                out.extend(rgb.iter().map(|v| v.to_bits()));
+            }
+            out.extend(
+                [m.shininess, m.dissolve, m.transmission]
+                    .into_iter()
+                    .flatten()
+                    .map(|v| v.to_bits()),
+            );
+        }
+        out
+    };
+    assert_eq!(
+        components(&again),
+        components(&mats),
+        "a material number changed bits across the round trip"
+    );
+    assert_eq!(
+        again.len(),
+        mats.len(),
+        "-0.0 tags must not be dropped or invented"
+    );
+}
+
+/// Signed zeros in a material are written as `-0` and read back signed.
+#[test]
+fn negative_zero_survives_the_material_writer() {
+    let materials = vec![Material {
+        name: "zero".into(),
+        defined: true,
+        diffuse: Some([-0.0, 0.0, 1.0]),
+        dissolve: Some(-0.0),
+        ..Default::default()
+    }];
+    let out = write_material_lib(&materials, &MtlWriteOptions::default());
+    assert_eq!(out, "newmtl zero\nKd -0 0 1\nd -0\n");
+    let again = parse_mtl(&out);
+    assert_eq!(
+        again[0].diffuse.unwrap()[0].to_bits(),
+        (-0.0f64).to_bits(),
+        "sign of zero lost"
+    );
+    assert_eq!(again[0].dissolve.unwrap().to_bits(), (-0.0f64).to_bits());
 }
 
 /// A material that only stands in for an unloaded reference is not written as a

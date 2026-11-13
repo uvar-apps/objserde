@@ -70,9 +70,48 @@ cargo publish --dry-run                    # do NOT publish
   `--features serde`, in debug and release, **and on an unpacked
   `cargo package` tarball**, where the Stanford models are absent and their
   tests skip.
-* Performance: 149 MB / 1,001,112-vertex / 1,999,396-face proxy — parse
-  834–922 ms, bind 31–59 ms, **874–962 ms** together against the 1.2 s budget
-  (five consecutive release runs, M-series).
+* Performance: same proxy, idle M-series — read 15–16 ms, parse 399–413 ms, bind
+  21–26 ms, **parse + bind 420–435 ms** against the 1.2 s budget; `Obj::load` end
+  to end 485–503 ms. Material support measured A/B against `ac35e00`: no
+  difference beyond noise.
+* **Timing discipline (learned the hard way):** measure on an idle machine, and
+  A/B against a baseline worktree (`git worktree add /tmp/base <sha>`) before
+  crediting or blaming a change. Figures recorded in this repo's first draft were
+  taken during concurrent dependency builds and were ~2x slow — a fabricated
+  regression and a fabricated fix, both from the same mistake.
+
+## Documented decisions — materials (0.2)
+
+* **`.mtl` parsing is total.** `parse_mtl` returns `Vec<Material>`, never a
+  `Result`; a tag the model cannot hold goes to `Material::unknown`, verbatim, and
+  the writer reproduces it. Rationale: broken paint must not make a file
+  unopenable. `parse_mtl_file` is the strict path only in the I/O sense.
+* **`mtllib` resolves automatically in `parse_file`**, against the OBJ's
+  directory; `parse`/`parse_bytes` leave it `LibraryStatus::Unresolved` for an
+  explicit `Obj::resolve_material_libs(base)`. Absent → `Missing`, present but
+  unreadable → `Unreadable`. Neither is an error, both are recorded: never let
+  "no materials" and "materials not found" collapse into the same value.
+* **Resolution is by name.** First definition of a name wins; a `usemtl` name no
+  loaded library defines keeps a `defined: false` entry so its faces retain the
+  reference; `usemtl` before `mtllib` still resolves.
+* **A repeated tag inside one material keeps the last value** (renderers do the
+  same); a repeated `newmtl` name keeps the **first** block. Different rules for
+  different scopes — both documented and tested.
+* **`Tr` is stored, not converted to `d`**; unstated tags stay `None` rather than
+  zero. Both are readings, not opinions.
+* **The writer emits `usemtl` per change, not per face**, quotes `mtllib` paths
+  containing whitespace, and skips `defined: false` entries (the reference lives
+  in the OBJ line, and re-reading re-synthesizes it).
+* **Map tag case and the `bump`/`map_bump` spelling are canonicalized**, the way
+  the OBJ writer canonicalizes `1.0` to `1`.
+* **No hash map anywhere.** Material names are matched linearly, on `usemtl` lines
+  only — dozens of comparisons per file, and it keeps iteration order out of the
+  read/write path entirely rather than relying on an argument that a particular
+  map is not iterated.
+* **Layer modules (`bind`, `error`, `model`, `mtl`, `parse`, `write`) are public
+  paths**; the root keeps re-exporting the common types, so `objserde::Material`
+  and `objserde::mtl::Material` are the same item. No new items, just navigable
+  docs for the three-layer story.
 
 ## Documented decisions (deliberate — do not "fix" them)
 
@@ -97,8 +136,9 @@ line here.
   `Vertex::extra`.
 * **An `f ` line with no corner tokens produces no face**, and the writer emits
   nothing for a hand-built 0-corner `Face`, so writer output always re-parses.
-* **Comments / `usemtl` / `g` / `o` / `s` / unknown lines are skipped and not
-  round-tripped** in v1. A documented limit, not an oversight.
+* **Comments / `g` / `o` / `s` / unknown lines are skipped and not
+  round-tripped.** A documented limit, not an oversight. (`usemtl`/`mtllib` left
+  this list in 0.2 — they are modelled now; see the materials decisions above.)
 * **Parse errors name the line, not the file** (only `Io` carries a path), which
   is what keeps errors cheap. Callers add the path they know.
 
