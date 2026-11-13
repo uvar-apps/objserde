@@ -198,6 +198,26 @@ do.
 
 Reproduce with `cargo test --release --test perf -- --ignored --nocapture`.
 
+## Parity with the reference loader
+
+`objserde::bind` and meshview's `load_obj` produce **bit-identical** output on all
+three samples: same positions, same triangle indices, and same unit normals down
+to the last bit (0 of 113,790 / 107,841 / 375,198 normal components differ). This
+is the real test of a rewrite that is supposed to preserve hard-won semantics, so
+it is worth re-running whenever the binding layer changes.
+
+The check cannot live in this crate's test suite — objserde must not depend on
+meshview — so it runs from a throwaway crate outside the repo:
+
+```toml
+[dependencies]                      # /tmp/paritycheck/Cargo.toml
+objserde = { path = "/Users/ugo/projects/objserde" }
+meshview = { path = "/Users/ugo/projects/meshview" }  # read-only reference
+```
+
+then compare `meshview::load_obj(p)` against `objserde::Obj::load(p)` with
+`f64::to_bits` per component.
+
 ## Limits
 
 Stated because knowing them is the difference between a tool and a surprise.

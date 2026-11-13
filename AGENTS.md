@@ -39,6 +39,12 @@ line grammar). Do not modify either; do not depend on either.
   locale-dependent formatting near a writer — comparisons and caches downstream
   rely on this.
 - **SES and meshview checkouts are read-only forever.**
+- **Semantic parity with meshview is checked bitwise, not by eye.** After any
+  change to `bind.rs` (or to float parsing), rebuild the throwaway parity crate
+  that depends on both `objserde` and `meshview` by path and compare
+  `meshview::load_obj` with `objserde::Obj::load` on all three samples using
+  `f64::to_bits` per component. As of this commit all positions, indices and
+  unit normals are bit-identical. objserde itself must never depend on meshview.
 
 ## Commands
 
