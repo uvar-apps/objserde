@@ -62,8 +62,9 @@ cargo publish --dry-run                    # do NOT publish
   `--features serde`, in debug and release, **and on an unpacked
   `cargo package` tarball**, where the Stanford models are absent and their
   tests skip.
-* Performance: 149 MB / 1,001,112-vertex / 1,999,396-face proxy — parse 821 ms,
-  bind 42 ms, **863 ms** together against the 1.2 s budget.
+* Performance: 149 MB / 1,001,112-vertex / 1,999,396-face proxy — parse
+  834–922 ms, bind 31–59 ms, **874–962 ms** together against the 1.2 s budget
+  (five consecutive release runs, M-series).
 
 ## Documented decisions (deliberate — do not "fix" them)
 

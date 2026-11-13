@@ -180,15 +180,19 @@ this; `tests/write.rs` and the `to_string_is_deterministic` property enforce it.
 
 `cargo build --release`, Apple silicon, single thread. A UV-sphere proxy of
 1,001,112 vertices / 1,999,396 triangles / 149 MB, in `f i//i` form
-(`assets/perf/gen_million_sphere.py`):
+(`assets/perf/gen_million_sphere.py`), over five consecutive runs:
 
 | Stage | Time |
 |---|---|
-| read | 30 ms |
-| parse | 821 ms |
-| bind | 42 ms |
-| **parse + bind** | **863 ms** (budget 1.2 s) |
-| `Obj::load` end to end | 964 ms |
+| read | 24–51 ms |
+| parse | 834–922 ms |
+| bind | 31–59 ms |
+| **parse + bind** | **874–962 ms** (budget 1.2 s) |
+| `Obj::load` end to end | ~0.9–1.1 s |
+
+The margin is real but not enormous, so treat the budget as a gate, not a
+suggestion: `Obj::bind` allocates one `Vec<Corner>` per face because the
+loss-preserving model demands it, and that is where the remaining time goes.
 
 Reproduce with `cargo test --release --test perf -- --ignored --nocapture`.
 
