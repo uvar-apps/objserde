@@ -191,8 +191,10 @@ this; `tests/write.rs` and the `to_string_is_deterministic` property enforce it.
 | `Obj::load` end to end | ~0.9–1.1 s |
 
 The margin is real but not enormous, so treat the budget as a gate, not a
-suggestion: `Obj::bind` allocates one `Vec<Corner>` per face because the
-loss-preserving model demands it, and that is where the remaining time goes.
+suggestion. Most of the parse time is `f64` field conversion, and the model pays
+one `Vec<Corner>` allocation per face because keeping polygons whole — rather
+than pre-triangulating into flat index arrays — is exactly what layer 1 exists to
+do.
 
 Reproduce with `cargo test --release --test perf -- --ignored --nocapture`.
 
