@@ -112,6 +112,17 @@ cargo publish --dry-run                    # do NOT publish
   only — dozens of comparisons per file, and it keeps iteration order out of the
   read/write path entirely rather than relying on an argument that a particular
   map is not iterated.
+* **Texture paths are returned to the caller and nothing else.** `Map.path` is the
+  string from the tag, verbatim. objserde does not resolve it against any
+  directory, does not `stat` it, and does not decode it — no image dependency, no
+  syscall storm, no wrong base directory turning "missing texture" into a lie.
+  Deciding what a texture path is *relative to*, and whether the file exists, is
+  the renderer's job and belongs to whichever resource root the app owns. Adding
+  texture resolution, existence status, or decoding here is out of scope by
+  decision, not by omission (pinned by
+  `tests/materials.rs::texture_paths_are_stored_not_resolved`). This does not
+  extend to `mtllib`: those paths *are* resolved, because a model genuinely cannot
+  know its colours without them.
 * **Layer modules (`bind`, `error`, `model`, `mtl`, `parse`, `write`) are public
   paths**; the root keeps re-exporting the common types, so `objserde::Material`
   and `objserde::mtl::Material` are the same item. No new items, just navigable

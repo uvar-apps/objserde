@@ -109,6 +109,12 @@ interpreting anything:
 | `map_Ka` `map_Kd` `map_Ks` `map_Ke` `map_Ns` `map_d` `map_bump`/`bump` `disp` `decal` | `maps: Vec<Map>` | each with its `path` and `-s -o -bm -imfchan -blendu -blendv -clamp -texres` options, in file order |
 | anything else | `unknown: Vec<UnknownTag>` | tag and arguments verbatim, written back unchanged |
 
+A texture is a path. `Map.path` is exactly what the tag said; objserde returns it
+and stops — no resolving against a directory, no existence check, no decoding.
+What a texture path is relative to belongs to the renderer and its resource root.
+(`mtllib` paths are the exception and *are* resolved, because without the
+definition the model does not know its own colours.)
+
 Three properties worth knowing, all of them tested:
 
 **Parsing a material file cannot fail.** `parse_mtl` returns materials, never a
