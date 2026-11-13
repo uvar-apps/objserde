@@ -18,7 +18,9 @@ exclude = [
 ]
 
 [dependencies]
-serde = { version = "1", optional = true }
+# Model types hold `Vec`/`String`, so serde's std support is required whenever
+# the feature is on; the core crate stays dependency-free.
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [features]
 serde = ["dep:serde"]
