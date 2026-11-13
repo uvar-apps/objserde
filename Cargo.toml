@@ -1,0 +1,31 @@
+[package]
+name = "objserde"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Loss-preserving Wavefront OBJ parser, uvar normal-binding layer and byte-deterministic writers, in std-only Rust"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["obj", "wavefront", "mesh", "parser", "3d"]
+categories = ["parser-implementations", "graphics"]
+# The two Stanford scan models (research/educational license, Turk/Levoy) are
+# test fixtures in the git repository only. The crambin SES mesh (molses,
+# MIT OR Apache-2.0, from the unrestricted PDB entry 1CRN) ships so the
+# published package still exercises the vn-binding path end to end.
+exclude = [
+    "assets/samples/stanford-bunny.obj",
+    "assets/samples/xyzrgb_dragon.obj",
+]
+
+[dependencies]
+serde = { version = "1", optional = true }
+
+[features]
+serde = ["dep:serde"]
+
+[dev-dependencies]
+proptest = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
