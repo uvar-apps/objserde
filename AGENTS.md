@@ -59,9 +59,11 @@ cargo publish --dry-run                    # do NOT publish
 
 ## Status
 
-* Branch `main`, not pushed and not published — remote operations are the
-  maintainer's. The crates.io name `objserde` was verified free at authoring
-  time (API and sparse index both 404).
+* Repo: `github.com/uvar-apps/objserde` (public, `origin`), branch `main`,
+  pushed. **Not published to crates.io** — that is a separate, explicit
+  per-version decision (`cargo publish --dry-run` passes; the name was verified
+  free at authoring time, API and sparse index both 404). Crates.io categories
+  may still need adding via the web UI.
 * Toolchain: edition 2024, `rust-version = 1.85` (local 1.100).
 * Tests: 65 without features (67 with `serde`) — 22 parser contract, 16 ported loader/sample, 11 binding, 6
   round-trip properties, 9 writer, 1 doctest, 2 gate the `serde` derives. Green with and without
