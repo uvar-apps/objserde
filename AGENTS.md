@@ -51,6 +51,48 @@ cargo package --list
 cargo publish --dry-run                    # do NOT publish
 ```
 
+## Status
+
+* Branch `main`, not pushed and not published — remote operations are the
+  maintainer's. The crates.io name `objserde` was verified free at authoring
+  time (API and sparse index both 404).
+* Toolchain: edition 2024, `rust-version = 1.85` (local 1.100).
+* Tests: 65 without features (67 with `serde`) — 22 parser contract, 16 ported loader/sample, 11 binding, 6
+  round-trip properties, 9 writer, 1 doctest, 2 gate the `serde` derives. Green with and without
+  `--features serde`, in debug and release, **and on an unpacked
+  `cargo package` tarball**, where the Stanford models are absent and their
+  tests skip.
+* Performance: 149 MB / 1,001,112-vertex / 1,999,396-face proxy — parse 821 ms,
+  bind 42 ms, **863 ms** together against the 1.2 s budget.
+
+## Documented decisions (deliberate — do not "fix" them)
+
+Each of these sharpens or differs from the meshview reference on purpose, and
+each is tested. Changing one needs a semver bump, a README table edit, and a
+line here.
+
+* **Relative (`-3`) indices are refused in all three corner fields.** meshview
+  rejected them only for `v` and silently left a negative `vn` unbound, so a file
+  using relative normals loaded and got geometric normals instead of the ones it
+  asked for, without a word. `bind` stays total; the parser just never hands it an
+  index it cannot represent.
+* **`0` in a `vt`/`vn` field means "unset" → stored as absent.** `0` in the
+  position field is an error.
+* **Only `v` indices are range-validated.** An out-of-range `vn` is kept as
+  written and left unbound by `bind` (rule 2 of the contract); an out-of-range
+  `vt` is kept for whoever consumes texture coordinates.
+* **An index past the `u32` address space** is reported as `IndexOutOfRange`
+  where it appears, with the vertex count as read so far — the one place a
+  reported count is not the final table size.
+* **Fields past the third on `vn` and `vt` are dropped**; on `v` they are kept in
+  `Vertex::extra`.
+* **An `f ` line with no corner tokens produces no face**, and the writer emits
+  nothing for a hand-built 0-corner `Face`, so writer output always re-parses.
+* **Comments / `usemtl` / `g` / `o` / `s` / unknown lines are skipped and not
+  round-tripped** in v1. A documented limit, not an oversight.
+* **Parse errors name the line, not the file** (only `Io` carries a path), which
+  is what keeps errors cheap. Callers add the path they know.
+
 ## Assets and licensing (hard rule)
 
 Code is `MIT OR Apache-2.0`; both LICENSE files stay in the repo root.

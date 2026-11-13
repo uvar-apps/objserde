@@ -136,8 +136,7 @@ impl Obj {
 /// `(b − a) × (c − a)` to all three corners, so the sum over the incident faces
 /// is proportional to their mean area. Accumulated in triangle order, which is
 /// what makes the float sum reproducible across runs and machines.
-#[must_use]
-pub fn geometric_normals(positions: &[[f64; 3]], triangles: &[[u32; 3]]) -> Vec<[f64; 3]> {
+pub(crate) fn geometric_normals(positions: &[[f64; 3]], triangles: &[[u32; 3]]) -> Vec<[f64; 3]> {
     let mut acc = vec![[0.0f64; 3]; positions.len()];
     for tri in triangles {
         let a = positions[tri[0] as usize];
