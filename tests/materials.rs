@@ -247,3 +247,80 @@ fn an_empty_material_name_is_a_name_not_a_clear() {
     assert_eq!(obj.faces[0].material, Some(0));
     assert_eq!(objserde::parse(&obj.to_string()).unwrap(), obj);
 }
+
+/// The export workflow end to end: read a model with materials, write the `.obj`
+/// and the `.mtl` it points at, then reopen the pair. What comes back should be
+/// the shading and texturing that went in.
+#[test]
+fn export_and_reimport_keeps_shading_and_textures() {
+    let original = objserde::parse_file(common::mtl_fixture("basic.obj")).unwrap();
+    assert_eq!(original.material_libs[0].status, LibraryStatus::Loaded);
+
+    // A unique directory per run, so parallel test threads cannot collide.
+    let dir = std::env::temp_dir().join(format!(
+        "objserde-export-{}-{}",
+        std::process::id(),
+        original.faces.len()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let obj_text = original.to_string();
+    let mtl_text = objserde::write_material_lib(
+        &original.materials,
+        &objserde::MtlWriteOptions {
+            header: vec!["# re-exported by objserde".into()],
+        },
+    );
+    // Mode A writes the reference the way the original spelled it.
+    assert!(obj_text.starts_with("mtllib basic.mtl\n"), "{obj_text}");
+    std::fs::write(dir.join("basic.mtl"), &mtl_text).unwrap();
+    std::fs::write(dir.join("model.obj"), &obj_text).unwrap();
+
+    let reread = objserde::parse_file(dir.join("model.obj")).unwrap();
+    assert_eq!(reread.faces.len(), original.faces.len());
+    assert_eq!(
+        reread.material_libs[0].status,
+        LibraryStatus::Loaded,
+        "the exported library was found next to the exported OBJ"
+    );
+
+    // Same materials, same shading numbers, same texture references.
+    assert_eq!(reread.materials.len(), original.materials.len());
+    for (before, after) in original.materials.iter().zip(&reread.materials) {
+        assert_eq!(before.name, after.name);
+        assert_eq!(before.diffuse, after.diffuse, "{}: colour", before.name);
+        assert_eq!(before.shininess, after.shininess);
+        assert_eq!(before.illumination, after.illumination);
+        let paths = |m: &objserde::Material| -> Vec<(objserde::MapKind, String)> {
+            m.maps
+                .iter()
+                .map(|map| (map.kind, map.path.clone()))
+                .collect()
+        };
+        assert_eq!(paths(before), paths(after), "{}: textures", before.name);
+    }
+
+    // And each face still draws under the material it started with.
+    for (a, b) in original.faces.iter().zip(&reread.faces) {
+        assert_eq!(
+            original.material_of(a).map(|m| &m.name),
+            reread.material_of(b).map(|m| &m.name)
+        );
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A texture reference survives even when its file is nowhere near: objserde
+/// stores the path and never opens the image.
+#[test]
+fn texture_paths_are_stored_not_resolved() {
+    let obj = objserde::parse_file(common::mtl_fixture("basic.obj")).unwrap();
+    let paint = obj.material_of(&obj.faces[0]).unwrap();
+    let map = paint.diffuse_map().unwrap();
+    assert_eq!(map.path, "textures/paint.png");
+    assert!(
+        !common::mtl_fixture("textures/paint.png").exists(),
+        "the fixture deliberately has no image on disk"
+    );
+}

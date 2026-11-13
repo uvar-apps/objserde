@@ -65,11 +65,15 @@ cargo publish --dry-run                    # do NOT publish
   free at authoring time, API and sparse index both 404). Crates.io categories
   may still need adding via the web UI.
 * Toolchain: edition 2024, `rust-version = 1.85` (local 1.100).
-* Tests: 65 without features (67 with `serde`) — 22 parser contract, 16 ported loader/sample, 11 binding, 6
-  round-trip properties, 9 writer, 1 doctest, 2 gate the `serde` derives. Green with and without
-  `--features serde`, in debug and release, **and on an unpacked
-  `cargo package` tarball**, where the Stanford models are absent and their
-  tests skip.
+* Version `0.2.0`. The 0.1 → 0.2 step is breaking: `Obj` gained `materials` and
+  `material_libs`, and `Face` gained `material`, so downstream struct literals
+  without `..Default::default()` fail to compile.
+* Tests: 109 without features (111 with `serde`) — 22 parser contract, 23 MTL
+  parser/writer, 20 materials/OBJ integration, 16 ported loader/sample, 11
+  binding, 6 round-trip properties, 9 writer, 2 doctests, plus 2 gating the
+  `serde` derives. Green with and without `--features serde`, in debug and
+  release, **and on an unpacked `cargo package` tarball**, where the Stanford
+  models are absent and their tests skip.
 * Performance: same proxy, idle M-series — read 15–16 ms, parse 399–413 ms, bind
   21–26 ms, **parse + bind 420–435 ms** against the 1.2 s budget; `Obj::load` end
   to end 485–503 ms. Material support measured A/B against `ac35e00`: no
@@ -161,10 +165,15 @@ entry 1CRN) ships with the crate.
   unless the user explicitly asks in that turn — approval in one turn does not
   carry to the next.
 - Gate before reporting done: `cargo fmt --check`, `cargo clippy --workspace
-  --all-targets -- -D warnings`, `cargo test --release`, with and without
-  `--features serde`.
+  --all-targets -- -D warnings` (with and without `--features serde`),
+  `cargo test --release` (both configs), and `cargo doc --no-deps` clean — public
+  modules make broken intra-doc links easy to introduce. Then `cargo package` and
+  test the unpacked tarball: that is the only check that the published artifact
+  still works without the excluded assets. Note `cargo test` does **not** build
+  feature-gated test files unless the feature is on, so a `--features serde` run
+  is not optional.
 - Performance budget: a 1M-vertex / 2M-face OBJ parses + binds in ≤ 1.2 s on
-  M-series, release (measured 863 ms on a 149 MB proxy). Regenerate with
-  `python3 assets/perf/gen_million_sphere.py`; the check is
+  M-series, release (measured 420–435 ms on a 149 MB proxy, idle machine).
+  Regenerate with `python3 assets/perf/gen_million_sphere.py`; the check is
   `cargo test --release --test perf -- --ignored --nocapture`, which skips when
   the proxy is absent.
