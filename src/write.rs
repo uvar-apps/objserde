@@ -72,7 +72,7 @@ fn write_corner(f: &mut fmt::Formatter<'_>, corner: &Corner) -> fmt::Result {
     // hand-built `u32::MAX` index from overflowing.
     let v = u64::from(corner.v) + 1;
     match (corner.vt, corner.vn) {
-        (Some(vt), Some(vn)) => write!(f, "{v}/{}", u64::from(vt) + 1)?,
+        (Some(vt), Some(vn)) => write!(f, "{v}/{}/{}", u64::from(vt) + 1, u64::from(vn) + 1)?,
         (Some(vt), None) => write!(f, "{v}/{}", u64::from(vt) + 1)?,
         // Two slashes: the texture slot stays empty, which is how a file carries
         // a normal without a uv.

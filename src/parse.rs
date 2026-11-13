@@ -170,20 +170,14 @@ fn read_corner(line: usize, token: &str, vertex_count: usize) -> Result<Corner, 
 ///
 /// A malformed number blames the whole corner token, because that is what the
 /// reader sees in the file.
-fn read_reference(
-    field: Option<&str>,
-    token: &str,
-    line: usize,
-) -> Result<Option<u32>, ObjError> {
+fn read_reference(field: Option<&str>, token: &str, line: usize) -> Result<Option<u32>, ObjError> {
     let Some(field) = field.filter(|field| !field.is_empty()) else {
         return Ok(None);
     };
-    let value = field
-        .parse::<i64>()
-        .map_err(|_| ObjError::BadFloat {
-            line,
-            got: token.to_string(),
-        })?;
+    let value = field.parse::<i64>().map_err(|_| ObjError::BadFloat {
+        line,
+        got: token.to_string(),
+    })?;
     if value < 0 {
         // Relative indices are relative in all three fields. Refusing beats
         // binding the corner to the wrong entry, and beats dropping the

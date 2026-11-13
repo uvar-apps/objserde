@@ -77,7 +77,7 @@ fn dragon_loads_with_exact_counts_and_keeps_zero_area_vertices() {
                 (n[k] - geo[i][k]).abs() < 1e-9,
                 "dragon vertex {i}: {n:?} vs geometric {:?}",
                 geo[i]
-            ); 
+            );
         }
         let len = common::length(&n);
         assert!(
@@ -136,7 +136,11 @@ fn f_slash_slash_i_form_binds_each_normals_own_index() {
     // the file wrote, not a shared one.
     let face = &obj.faces[10];
     for (k, corner) in face.corners.iter().enumerate() {
-        assert_eq!(corner.vn, Some(corner.v), "face corner {k} lost its vn index");
+        assert_eq!(
+            corner.vn,
+            Some(corner.v),
+            "face corner {k} lost its vn index"
+        );
         assert_eq!(corner.vt, None, "vn-only corners must not gain a vt");
     }
 }
@@ -235,9 +239,7 @@ fn face_index_out_of_range_errors() {
     let src = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 9\n";
     let err = parse(src).unwrap_err();
     match err {
-        ObjError::IndexOutOfRange {
-            line, value, count,
-        } => {
+        ObjError::IndexOutOfRange { line, value, count } => {
             assert_eq!(line, 4);
             assert_eq!(value, 9);
             assert_eq!(count, 3);
@@ -245,7 +247,10 @@ fn face_index_out_of_range_errors() {
         other => panic!("expected IndexOutOfRange, got {other}"),
     }
     let msg = parse(src).unwrap_err().to_string();
-    assert!(msg.contains("line 4") && msg.contains("out of range"), "{msg}");
+    assert!(
+        msg.contains("line 4") && msg.contains("out of range"),
+        "{msg}"
+    );
 }
 
 #[test]
@@ -256,7 +261,10 @@ fn every_out_of_range_face_reports_its_own_line() {
     let err = parse(src).unwrap_err();
     match err {
         ObjError::IndexOutOfRange { line, value, count } => {
-            assert_eq!(line, 5, "the first offending face should report its own line");
+            assert_eq!(
+                line, 5,
+                "the first offending face should report its own line"
+            );
             assert_eq!(value, 7);
             assert_eq!(count, 3);
         }
@@ -276,7 +284,10 @@ fn negative_face_index_rejected_with_clear_error() {
         other => panic!("expected NegativeIndex, got {other}"),
     }
     let msg = parse(src).unwrap_err().to_string();
-    assert!(msg.contains("relative") && msg.contains("not supported"), "{msg}");
+    assert!(
+        msg.contains("relative") && msg.contains("not supported"),
+        "{msg}"
+    );
 }
 
 #[test]

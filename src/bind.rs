@@ -71,11 +71,7 @@ impl Obj {
     /// [`ObjError::IndexOutOfRange`](crate::ObjError::IndexOutOfRange).
     #[must_use]
     pub fn bind(&self) -> BoundMesh {
-        let positions: Vec<[f64; 3]> = self
-            .vertices
-            .iter()
-            .map(|vertex| vertex.position)
-            .collect();
+        let positions: Vec<[f64; 3]> = self.vertices.iter().map(|vertex| vertex.position).collect();
         let count = positions.len();
         let mut normals = vec![[0.0f64; 3]; count];
         let mut bound = vec![false; count];
@@ -96,10 +92,7 @@ impl Obj {
                     let Some(&normal) = self.normals.get(index as usize) else {
                         continue;
                     };
-                    debug_assert!(
-                        (corner.v as usize) < count,
-                        "corner past the vertex table"
-                    );
+                    debug_assert!((corner.v as usize) < count, "corner past the vertex table");
                     let slot = corner.v as usize;
                     if !bound[slot] {
                         normals[slot] = normal;

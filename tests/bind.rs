@@ -224,7 +224,9 @@ f 1 2 3 4 5
     let tris = obj.triangulate();
     assert_eq!(tris.len(), 3);
     assert_eq!(
-        tris.iter().map(|t| t.corners.map(|c| c.v)).collect::<Vec<_>>(),
+        tris.iter()
+            .map(|t| t.corners.map(|c| c.v))
+            .collect::<Vec<_>>(),
         vec![[0, 1, 2], [0, 2, 3], [0, 3, 4]]
     );
 }
