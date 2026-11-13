@@ -3,11 +3,14 @@
 //! Every record the parser models is stored as it was read: `v` lines keep
 //! their trailing floats, the `vn` table keeps the values written (they are
 //! **not** normalized here — see [`Obj::bind`](crate::Obj::bind)), `vt` lines
-//! keep their arity, and faces keep all their corners instead of being
-//! pre-triangulated. Nothing in this layer resolves a normal against a
-//! position; that is the binding layer's job.
+//! keep their arity, faces keep all their corners instead of being
+//! pre-triangulated, and each face remembers the material it was drawn under.
+//! Nothing in this layer resolves a normal against a position; that is the
+//! binding layer's job.
 
-/// A parsed OBJ file: the four tables the parser models.
+use crate::mtl::{Material, MaterialLib};
+
+/// A parsed OBJ file: the tables the parser models.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Obj {
@@ -20,9 +23,43 @@ pub struct Obj {
     pub tex_coords: Vec<TexCoord>,
     /// One entry per `f` line that carried at least one corner, in file order.
     pub faces: Vec<Face>,
+    /// One entry per `mtllib` line, in the order the lines appeared. Status
+    /// tells the caller whether the named library was actually read — a missing
+    /// `.mtl` is not an error, but it is also not silently nothing.
+    pub material_libs: Vec<MaterialLib>,
+    /// The material table: every material defined by a loaded library, plus one
+    /// entry per `usemtl` name that no loaded library defines (see
+    /// [`Material::defined`]). Indexed by [`Face::material`].
+    pub materials: Vec<Material>,
 }
 
 impl Obj {
+    /// The material a face was drawn under, if any.
+    #[must_use]
+    pub fn material_of(&self, face: &Face) -> Option<&Material> {
+        face.material.and_then(|i| self.materials.get(i as usize))
+    }
+
+    /// Index of a material by name, as `usemtl` would spell it.
+    #[must_use]
+    pub fn material_named(&self, name: &str) -> Option<u32> {
+        // Linear on purpose: material tables hold dozens of entries, and the
+        // crate keeps a hash map out of the read/write path entirely so no
+        // output could ever depend on iteration order.
+        self.materials
+            .iter()
+            .position(|m| m.name == name)
+            .map(|i| i as u32)
+    }
+
+    /// Faces drawn under the material at `index`, in file order.
+    pub fn faces_using(&self, index: u32) -> impl Iterator<Item = (usize, &Face)> + use<'_> {
+        self.faces
+            .iter()
+            .enumerate()
+            .filter(move |(_, face)| face.material == Some(index))
+    }
+
     /// Fan-triangulate every face: corners `(0, k, k+1)` for
     /// `k in 1..corners.len() - 1`. Faces with fewer than three corners
     /// produce no triangles — the parser still keeps them.
@@ -99,13 +136,17 @@ impl TexCoord {
     }
 }
 
-/// An `f` line: its corners, unreordered and un-triangulated.
+/// An `f` line: its corners, unreordered and un-triangulated, plus the material
+/// in effect when the face was written.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Face {
     /// The corner records of the line, in order. At least one: a face line
     /// with no corners is skipped by the parser.
     pub corners: Vec<Corner>,
+    /// Index into [`Obj::materials`] — the material set by the last `usemtl`
+    /// line before this face, or `None` if nothing was in effect.
+    pub material: Option<u32>,
 }
 
 impl Face {

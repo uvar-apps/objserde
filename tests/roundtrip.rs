@@ -4,7 +4,8 @@
 mod common;
 
 use objserde::{
-    BoundMesh, Corner, Face, Obj, Precision, TexCoord, Vertex, WriteOptions, write_mesh,
+    BoundMesh, Corner, Face, LibraryStatus, Material, MaterialLib, Obj, Precision, TexCoord,
+    Vertex, WriteOptions, write_mesh,
 };
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -47,38 +48,85 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
             n_tex,
         );
         // One to four faces; each has 4 or fewer corners referencing the
-        // vertices this model actually has.
+        // vertices this model actually has, plus an optional material switch in
+        // front of it (`Some(n)` stands for `usemtl mat{n}`).
         let faces = prop::collection::vec(
-            prop::collection::vec(
-                (
-                    index_below(n_verts),
-                    prop::option::weighted(0.5, index_below(n_tex)),
-                    prop::option::weighted(0.5, index_below(n_normals)),
+            (
+                prop::collection::vec(
+                    (
+                        index_below(n_verts),
+                        prop::option::weighted(0.5, index_below(n_tex)),
+                        prop::option::weighted(0.5, index_below(n_normals)),
+                    ),
+                    1..5,
                 ),
-                1..5,
+                prop::option::weighted(0.4, 0u32..3),
             ),
             0..4,
         );
-        (vertices, normals, tex, faces).prop_map(|(vertices, normals, tex, faces)| Obj {
-            vertices: vertices
-                .into_iter()
-                .map(|(position, extra)| Vertex { position, extra })
-                .collect(),
-            normals,
-            tex_coords: tex
-                .iter()
-                .filter_map(|values| TexCoord::new(values))
-                .collect(),
-            faces: faces
-                .into_iter()
-                .map(|corners| Face {
-                    corners: corners
+        // Library paths, including ones with spaces (which the writer must quote
+        // so they read back as a single name).
+        let lib_names = prop::collection::vec(
+            prop_oneof![
+                Just("materials.mtl".to_string()),
+                Just("sub/dir/mats.mtl".to_string()),
+                Just("my materials.mtl".to_string()),
+                Just("Mat's Way.mtl".to_string()),
+            ],
+            0..3,
+        );
+        (vertices, normals, tex, faces, lib_names).prop_map(
+            move |(vertices, normals, tex, faces, lib_names)| {
+                // Materials in OBJ are *state*: `usemtl` sets it for every face
+                // that follows. Generate it that way so the model a writer can
+                // actually reproduce is the model being tested — and so the
+                // material table ends up in first-use order, as a re-parse
+                // builds it.
+                let mut materials: Vec<Material> = Vec::new();
+                let mut current: Option<u32> = None;
+                let mut out_faces = Vec::with_capacity(faces.len());
+                for (corners, switch) in faces {
+                    if let Some(want) = switch {
+                        let name = format!("mat{want}");
+                        let index = match materials.iter().position(|m| m.name == name) {
+                            Some(i) => i,
+                            None => {
+                                materials.push(Material::referenced(name));
+                                materials.len() - 1
+                            }
+                        };
+                        current = Some(index as u32);
+                    }
+                    out_faces.push(Face {
+                        corners: corners
+                            .into_iter()
+                            .map(|(v, vt, vn)| Corner { v, vt, vn })
+                            .collect(),
+                        material: current,
+                    });
+                }
+                Obj {
+                    vertices: vertices
                         .into_iter()
-                        .map(|(v, vt, vn)| Corner { v, vt, vn })
+                        .map(|(position, extra)| Vertex { position, extra })
                         .collect(),
-                })
-                .collect(),
-        })
+                    normals,
+                    tex_coords: tex
+                        .iter()
+                        .filter_map(|values| TexCoord::new(values))
+                        .collect(),
+                    faces: out_faces,
+                    material_libs: lib_names
+                        .into_iter()
+                        .map(|path| MaterialLib {
+                            path,
+                            status: LibraryStatus::Unresolved,
+                        })
+                        .collect(),
+                    materials,
+                }
+            },
+        )
     })
 }
 

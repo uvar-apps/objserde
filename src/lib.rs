@@ -84,11 +84,19 @@
 mod bind;
 mod error;
 mod model;
+mod mtl;
 mod parse;
 mod write;
 
 pub use bind::BoundMesh;
 pub use error::ObjError;
 pub use model::{Corner, Face, Obj, TexCoord, Triangle, Vertex};
+pub use mtl::{
+    Channel, LibraryStatus, Map, MapKind, MapOption, Material, MaterialLib, UnknownTag, parse_mtl,
+    parse_mtl_file,
+};
 pub use parse::{parse, parse_bytes, parse_file};
-pub use write::{DEFAULT_PRECISION, Precision, WriteOptions, write_mesh, write_mesh_into};
+pub use write::{
+    DEFAULT_PRECISION, MtlWriteOptions, Precision, WriteOptions, write_material_lib,
+    write_material_lib_into, write_mesh, write_mesh_into,
+};

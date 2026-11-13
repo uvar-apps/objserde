@@ -90,3 +90,10 @@ pub fn vertex_normals_from_file(path: &str) -> Vec<[f64; 3]> {
     }
     vns
 }
+
+/// Path to a file under `tests/fixtures/mtl/`.
+pub fn mtl_fixture(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/mtl")
+        .join(name)
+}

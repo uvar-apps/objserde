@@ -1,0 +1,7 @@
+# usemtl appears before the mtllib that defines it
+v 0 0 0
+v 1 0 0
+v 0 1 0
+usemtl early
+f 1 2 3
+mtllib late.mtl

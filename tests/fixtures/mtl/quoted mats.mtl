@@ -1,0 +1,3 @@
+newmtl an explicit name
+Kd 0.2 0.3 0.4
+map_Kd my textures/wood grain.png

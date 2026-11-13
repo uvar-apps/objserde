@@ -1,0 +1,7 @@
+# two libraries on one line, and a name defined in both
+mtllib first.mtl second.mtl
+v 0 0 0
+v 1 0 0
+v 0 1 0
+usemtl shared
+f 1 2 3

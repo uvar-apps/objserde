@@ -5,13 +5,14 @@ use std::error::Error as _;
 
 use objserde::ObjError;
 
+/// Everything the model does not hold is skipped rather than fatal. (`usemtl`
+/// used to live in this list; it is modelled now — see tests/materials.rs.)
 #[test]
 fn unknown_and_unmodelled_records_are_skipped_not_fatal() {
     let src = "\
 # a comment
 o widget
 g group_name
-usemtl material
 s 1
 vp 0.1 0.2 0.3
 vnp 0 0 1

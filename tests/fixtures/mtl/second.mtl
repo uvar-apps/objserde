@@ -1,0 +1,4 @@
+newmtl shared
+Kd 0 0 1
+newmtl only-second
+Kd 0 1 0

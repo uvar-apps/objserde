@@ -22,13 +22,26 @@ use std::fmt;
 
 use crate::bind::BoundMesh;
 use crate::model::{Corner, Obj};
+use crate::mtl::{MapOption, Material};
 
 /// Mode A: every record in canonical layout, shape-preserving.
+///
+/// `mtllib` lines come first, then `v`, `vt`, `vn`, then faces — with a `usemtl`
+/// line wherever the material changes, since in OBJ a material is state, not a
+/// per-face field.
 ///
 /// A face with no corners has nothing to address and writes nothing: the parser
 /// never produces one, and a bare `f` line would not read back as a face.
 impl fmt::Display for Obj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for lib in &self.material_libs {
+            // Quote a path containing spaces so it reads back as one name.
+            if lib.path.contains(char::is_whitespace) {
+                writeln!(f, "mtllib \"{path}\"", path = lib.path)?;
+            } else {
+                writeln!(f, "mtllib {}", lib.path)?;
+            }
+        }
         for vertex in &self.vertices {
             let [x, y, z] = vertex.position;
             write!(f, "v {x} {y} {z}")?;
@@ -50,7 +63,18 @@ impl fmt::Display for Obj {
             let [x, y, z] = normal;
             writeln!(f, "vn {x} {y} {z}")?;
         }
+        let mut current: Option<u32> = None;
         for face in &self.faces {
+            // Material changes are the only reason a non-geometry line appears
+            // among the faces; emit one exactly when it differs.
+            if face.material != current {
+                if let Some(index) = face.material {
+                    if let Some(material) = self.materials.get(index as usize) {
+                        writeln!(f, "usemtl {}", material.name)?;
+                    }
+                }
+                current = face.material;
+            }
             let Some((first, rest)) = face.corners.split_first() else {
                 continue;
             };
@@ -178,4 +202,136 @@ impl fmt::Display for Num {
             Precision::Shortest => write!(f, "{}", self.0),
         }
     }
+}
+
+/// Options for [`write_material_lib`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MtlWriteOptions {
+    /// Lines written before the materials, verbatim — `#` included if the caller
+    /// wants a comment. No timestamp, so repeated writes stay byte-identical.
+    pub header: Vec<String>,
+}
+
+/// Write a material library in the `.mtl` format: canonical tag order per
+/// material, then that material's texture maps in the order they were read, then
+/// any tags the model does not hold, verbatim.
+///
+/// Numbers use the shortest form that parses back to the same value, so
+/// [`parse_mtl`](crate::parse_mtl) of this output is bit-identical — the same
+/// guarantee Mode A makes for geometry. Tag *case* is canonicalized (a file that
+/// said `MAP_KD` comes back as `map_Kd`), and `bump` becomes `map_bump`.
+///
+/// Entries that only stand in for an unloaded `usemtl` reference
+/// ([`Material::defined`] is false) are not written: a definition file should not
+/// claim materials it has no properties for. The reference itself is safe — it
+/// lives in the OBJ's `usemtl` line, and re-reading synthesizes the entry again.
+pub fn write_material_lib(materials: &[Material], options: &MtlWriteOptions) -> String {
+    let mut out = String::new();
+    write_material_lib_into(&mut out, materials, options).ok();
+    out
+}
+
+/// [`write_material_lib`] into any [`std::fmt::Write`] sink.
+///
+/// # Errors
+///
+/// Whatever the sink reports; writing to a [`String`] never fails.
+pub fn write_material_lib_into<W: fmt::Write>(
+    out: &mut W,
+    materials: &[Material],
+    options: &MtlWriteOptions,
+) -> fmt::Result {
+    for line in &options.header {
+        writeln!(out, "{line}")?;
+    }
+    for material in materials {
+        if !material.defined {
+            continue;
+        }
+        writeln!(out, "newmtl {}", material.name)?;
+        if let Some(rgb) = material.ambient {
+            writeln!(out, "Ka {} {} {}", rgb[0], rgb[1], rgb[2])?;
+        }
+        if let Some(rgb) = material.diffuse {
+            writeln!(out, "Kd {} {} {}", rgb[0], rgb[1], rgb[2])?;
+        }
+        if let Some(rgb) = material.specular {
+            writeln!(out, "Ks {} {} {}", rgb[0], rgb[1], rgb[2])?;
+        }
+        if let Some(rgb) = material.emissive {
+            writeln!(out, "Ke {} {} {}", rgb[0], rgb[1], rgb[2])?;
+        }
+        if let Some(v) = material.shininess {
+            writeln!(out, "Ns {v}")?;
+        }
+        if let Some(v) = material.dissolve {
+            writeln!(out, "d {v}")?;
+        }
+        if let Some(v) = material.transmission {
+            writeln!(out, "Tr {v}")?;
+        }
+        if let Some(v) = material.illumination {
+            writeln!(out, "illum {v}")?;
+        }
+        for map in &material.maps {
+            write!(out, "{}", map.kind.tag())?;
+            for option in &map.options {
+                write!(out, " {}", map_option(option))?;
+            }
+            writeln!(out, " {}", map.path)?;
+        }
+        for tag in &material.unknown {
+            if tag.args.is_empty() {
+                writeln!(out, "{}", tag.tag)?;
+            } else {
+                writeln!(out, "{} {}", tag.tag, tag.args)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One `-flag …` group, spelled back the way it was read.
+fn map_option(option: &MapOption) -> impl fmt::Display + '_ {
+    struct Opt<'a>(&'a MapOption);
+    impl fmt::Display for Opt<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.0 {
+                MapOption::Scale(v) => write!(f, "-s {}", Joined(v))?,
+                MapOption::Offset(v) => write!(f, "-o {}", Joined(v))?,
+                MapOption::BumpScale(v) => write!(f, "-bm {v}")?,
+                MapOption::Channel(c) => write!(f, "-imfchan {}", c.letter())?,
+                MapOption::BlendU(v) => write!(f, "-blendu {}", on_off(*v))?,
+                MapOption::BlendV(v) => write!(f, "-blendv {}", on_off(*v))?,
+                MapOption::Clamp(v) => write!(f, "-clamp {}", on_off(*v))?,
+                MapOption::TextureResolution(v) => write!(f, "-texres {v}")?,
+                MapOption::Unknown { flag, args } => {
+                    write!(f, "{flag}")?;
+                    for arg in args {
+                        write!(f, " {arg}")?;
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+    Opt(option)
+}
+
+struct Joined<'a>(&'a [f64]);
+
+impl fmt::Display for Joined<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, v) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{v}")?;
+        }
+        Ok(())
+    }
+}
+
+const fn on_off(value: bool) -> &'static str {
+    if value { "on" } else { "off" }
 }

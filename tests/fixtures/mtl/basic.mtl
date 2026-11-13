@@ -1,0 +1,20 @@
+# materials for basic.obj
+newmtl paint
+Ka 0.1 0.2 0.3
+Kd 0.8 0.1 0.05
+Ks 0.5 0.5 0.5
+Ns 128
+d 0.9
+illum 2
+map_Kd -s 2 2 1 -o 0.5 0.5 -clamp on textures/paint.png
+map_bump -bm 0.5 textures/paint_bump.png
+
+newmtl metal
+Kd 0.6 0.6 0.7
+Ks 1 1 1
+Ns 400
+illum 7
+map_Kd textures/metal.png
+map_Ks -imfchan r textures/metal_spec.png
+sharpini 90
+Kd 0.111 0.222 0.333
