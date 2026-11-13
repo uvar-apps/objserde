@@ -73,6 +73,7 @@ entry 1CRN) ships with the crate.
   --all-targets -- -D warnings`, `cargo test --release`, with and without
   `--features serde`.
 - Performance budget: a 1M-vertex / 2M-face OBJ parses + binds in ≤ 1.2 s on
-  M-series, release. The proxy generator is documented in
-  `assets/perf/README.md`; the check is `cargo test --release --test perf --
-  --ignored`.
+  M-series, release (measured 863 ms on a 149 MB proxy). Regenerate with
+  `python3 assets/perf/gen_million_sphere.py`; the check is
+  `cargo test --release --test perf -- --ignored --nocapture`, which skips when
+  the proxy is absent.
