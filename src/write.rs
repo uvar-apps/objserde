@@ -68,16 +68,18 @@ impl fmt::Display for Obj {
 /// Write one corner in the exact field form its components justify: `i`,
 /// `i/vt`, `i//vn` or `i/vt/vn`.
 fn write_corner(f: &mut fmt::Formatter<'_>, corner: &Corner) -> fmt::Result {
-    // Back to the 1-based indices the file used.
-    write!(f, "{}", corner.v + 1)?;
+    // Back to the 1-based indices the file used. The widening keeps a
+    // hand-built `u32::MAX` index from overflowing.
+    let v = u64::from(corner.v) + 1;
     match (corner.vt, corner.vn) {
-        (Some(vt), Some(vn)) => write!(f, "/{}/{}", vt + 1, vn + 1),
-        (Some(vt), None) => write!(f, "/{}", vt + 1),
+        (Some(vt), Some(vn)) => write!(f, "{v}/{}", u64::from(vt) + 1)?,
+        (Some(vt), None) => write!(f, "{v}/{}", u64::from(vt) + 1)?,
         // Two slashes: the texture slot stays empty, which is how a file carries
         // a normal without a uv.
-        (None, Some(vn)) => write!(f, "//{}", vn + 1),
-        (None, None) => Ok(()),
+        (None, Some(vn)) => write!(f, "{v}//{}", u64::from(vn) + 1)?,
+        (None, None) => write!(f, "{v}")?,
     }
+    Ok(())
 }
 
 /// How [`write_mesh`] formats coordinates.
@@ -152,7 +154,11 @@ pub fn write_mesh_into<W: fmt::Write>(
         )?;
     }
     for t in &mesh.triangles {
-        let (a, b, c) = (t[0] + 1, t[1] + 1, t[2] + 1);
+        let (a, b, c) = (
+            u64::from(t[0]) + 1,
+            u64::from(t[1]) + 1,
+            u64::from(t[2]) + 1,
+        );
         writeln!(out, "f {a}//{a} {b}//{b} {c}//{c}")?;
     }
     Ok(())
