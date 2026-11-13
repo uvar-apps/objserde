@@ -9,13 +9,17 @@
 //!
 //! | Layer | Type | Keeps | Deliberately does not |
 //! |---|---|---|---|
-//! | 1 · raw model | [`Obj`] | every `v`/`vn`/`vt`/`f` record read, in file order, polygons whole | resolve a normal against a surface point |
-//! | 2 · binding | [`BoundMesh`] | one unit normal per position, triangle indices | model materials, textures, groups |
-//! | 3 · writers | [`Obj::to_string`], [`write_mesh`] | the same bytes every run | carry a timestamp or a locale |
+//! | 1 · raw model | [`Obj`] | every `v`/`vn`/`vt`/`f` record read, in file order, polygons whole, each face under its material | resolve a normal against a surface point |
+//! | 2 · binding | [`BoundMesh`] | one unit normal per position, triangle indices | read a material, or fail |
+//! | 3 · writers | `obj.to_string()`, [`write_mesh`], [`write_material_lib`] | the same bytes every run | carry a timestamp or a locale |
 //!
 //! Layer 2 is a *policy*, not a data structure: it is the uvar normal-binding
 //! contract, and if you need different semantics you parse with layer 1 and
 //! write your own resolve step. Layer 1 round-trips; layer 2 is for shading.
+//!
+//! The modules are those layers, and the crate root re-exports the types you
+//! reach for most, so `objserde::Material` and `objserde::mtl::Material` are the
+//! same item.
 //!
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,13 +33,58 @@
 //! # }
 //! ```
 //!
+//! # Materials and textures
+//!
+//! `mtllib` and `usemtl` are modelled, so shading arrives with the geometry:
+//!
+//! ```no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let obj = objserde::parse_file("model.obj")?; // reads model.mtl if it is there
+//! for face in &obj.faces {
+//!     if let Some(material) = obj.material_of(face) {
+//!         let _colour = material.diffuse;                 // Option<[f64; 3]>
+//!         let _texture = material.diffuse_map();          // Option<&Map>
+//!     }
+//! }
+//! // Write the library the OBJ's `mtllib` line points at:
+//! let mtl = objserde::write_material_lib(
+//!     &obj.materials,
+//!     &objserde::MtlWriteOptions { header: vec!["# from model.obj".into()] },
+//! );
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Materials in OBJ are *state*: `usemtl` applies to every face after it, so
+//! [`Face::material`] is the material in effect at that face and the writer emits
+//! a `usemtl` line wherever it changes — not one per face.
+//!
+//! [`parse_file`] resolves `mtllib` against the OBJ's directory. A library that
+//! is missing or unreadable does not fail the load; it is recorded on
+//! [`Obj::material_libs`] as a [`LibraryStatus`], so "no materials" and "I could
+//! not find them" stay different facts. Parsing from text has no directory, so
+//! references come back [`LibraryStatus::Unresolved`] until you call
+//! [`Obj::resolve_material_libs`].
+//!
+//! Parsing a `.mtl` **cannot fail**: a tag this model cannot hold — a spectral
+//! `Kd 0.44 wood.spe`, a vendor `sharpini`, a misspelled value — is preserved
+//! verbatim in [`Material::unknown`] and written back unchanged, instead of
+//! dropping or failing the whole load. See the [`mtl`] module docs.
+//!
+//! Two round-trip caveats, both inherent to the format rather than to this
+//! implementation: definitions live in a separate `.mtl` file, so writing the OBJ
+//! text carries *references* only (call [`write_material_lib`] for the
+//! definitions); and OBJ has no way to clear a material, so a hand-built face
+//! with `material: None` following a referenced one inherits the previous material
+//! when the text is re-read.
+//!
 //! # Which lines are read
 //!
-//! `v`, `vn`, `vt`, `f` — matched as exact line prefixes, one record per line.
-//! Every other line is skipped: comments, `usemtl`, `g`, `o`, `s`, blanks,
-//! unknown prefixes, and anything with leading whitespace before the keyword.
-//! Skipping is not an error, but a skipped line is **not** round-tripped: v1
-//! stores four record types and writes those back.
+//! `v`, `vn`, `vt`, `f`, `usemtl`, `mtllib` — matched as exact line prefixes, one
+//! record per line. Every other line is skipped: comments, `g`, `o`, `s`, `vp`,
+//! blanks, unknown prefixes, and anything with leading whitespace before the
+//! keyword. Skipping is not an error, but a skipped line is **not** round-tripped:
+//! v1 stores six record types and writes those back.
 //!
 //! # The binding rules, and why they exist
 //!
@@ -69,11 +118,13 @@
 //!
 //! # Limits, stated plainly
 //!
-//! * Skipped records (comments, materials, groups, `vp`/`curv`/… ) do not survive
-//!   a round trip.
+//! * Skipped records (comments, `g`, `o`, `s`, `vp`/`curv`/… ) do not survive a
+//!   round trip. Materials and their references **do** — see above.
 //! * Face indices use the `u32` space; a file with more than 2^32 vertices is not
 //!   addressable.
-//! * No material, group or smoothing-group model — this is geometry, not a scene.
+//! * Groups (`g`/`o`) and smoothing groups (`s`) are still not modelled, and
+//!   `bind` knows nothing about materials: this is geometry plus shading, not a
+//!   scene graph.
 //! * Mode A writes the shortest round-trip float form, which is not the form the
 //!   input file used. Re-parsing is exact; diffing against the original text is
 //!   not the point.
@@ -81,12 +132,12 @@
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
 
-mod bind;
-mod error;
-mod model;
-mod mtl;
-mod parse;
-mod write;
+pub mod bind;
+pub mod error;
+pub mod model;
+pub mod mtl;
+pub mod parse;
+pub mod write;
 
 pub use bind::BoundMesh;
 pub use error::ObjError;

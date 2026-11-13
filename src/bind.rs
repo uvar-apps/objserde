@@ -60,7 +60,7 @@ impl BoundMesh {
 }
 
 impl Obj {
-    /// Resolve normals against positions. See the [module docs](self) for the
+    /// Resolve normals against positions. See [the crate docs](crate) for the
     /// exact rules; this cannot fail.
     ///
     /// # Panics

@@ -78,7 +78,7 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Obj, ObjError> {
 /// line the parser ignores cannot fail the read.
 ///
 /// `mtllib` references are recorded as
-/// [`LibraryStatus::Unresolved`](crate::LibraryStatus::Unresolved): bytes carry no
+/// [`LibraryStatus::Unresolved`]: bytes carry no
 /// directory to resolve them against. Use [`parse_file`], or
 /// [`Obj::resolve_material_libs`], to load the materials.
 pub fn parse_bytes(bytes: &[u8]) -> Result<Obj, ObjError> {

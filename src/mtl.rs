@@ -55,7 +55,7 @@ pub struct MaterialLib {
 pub enum LibraryStatus {
     /// The file was read and its materials merged.
     Loaded,
-    /// The reference came from [`parse`](crate::parse) — text with no directory
+    /// The reference came from [`parse`](crate::parse::parse) — text with no directory
     /// to resolve against. Call [`Obj::resolve_material_libs`] with a base path.
     ///
     /// [`Obj::resolve_material_libs`]: crate::Obj::resolve_material_libs
