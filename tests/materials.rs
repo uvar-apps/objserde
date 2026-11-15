@@ -134,9 +134,13 @@ fn quoted_library_names_survive_the_trip() {
     assert_eq!(obj.material_libs[0].path, "quoted mats.mtl");
     assert_eq!(obj.material_libs[0].status, LibraryStatus::Loaded);
     assert_eq!(obj.materials[0].name, "an explicit name");
-    // A name with spaces comes back as one name, quoted on the way out.
+    // A name with spaces comes back as one name, quoted on the way out, after
+    // the file's header comment.
     let text = obj.to_string();
-    assert!(text.starts_with("mtllib \"quoted mats.mtl\"\n"), "{text}");
+    assert!(
+        text.starts_with("# library names with spaces, quoted\nmtllib \"quoted mats.mtl\"\n"),
+        "{text}"
+    );
     let again = parse(&text).unwrap();
     assert_eq!(again.material_libs[0].path, "quoted mats.mtl");
 }
@@ -215,14 +219,15 @@ fn material_lines_are_emitted_once_per_change() {
 
 /// Writing a file with no materials must be byte-identical to before material
 /// support: six leading `mtllib`/`usemtl` lines appearing in old output would be
-/// a silent change for every existing caller.
+/// a silent change for every existing caller. The one difference since 0.3 is
+/// the header comment, which is now kept.
 #[test]
 fn material_free_output_is_byte_identical_to_the_pre_material_crate() {
     let src = "# comment\nv 0 0 0 1 0 0\nv 1 0 0\nv 0 1 0\nvt 0.5 0.5\nvn 0 0 1\nf 1/1/1 2 3\n";
     let obj = parse(src).unwrap();
     assert_eq!(
         obj.to_string(),
-        "v 0 0 0 1 0 0\nv 1 0 0\nv 0 1 0\nvt 0.5 0.5\nvn 0 0 1\nf 1/1/1 2 3\n"
+        "# comment\nv 0 0 0 1 0 0\nv 1 0 0\nv 0 1 0\nvt 0.5 0.5\nvn 0 0 1\nf 1/1/1 2 3\n"
     );
 }
 
@@ -271,8 +276,12 @@ fn export_and_reimport_keeps_shading_and_textures() {
             header: vec!["# re-exported by objserde".into()],
         },
     );
-    // Mode A writes the reference the way the original spelled it.
-    assert!(obj_text.starts_with("mtllib basic.mtl\n"), "{obj_text}");
+    // Mode A writes the header comment, then the reference the way the
+    // original spelled it.
+    assert!(
+        obj_text.starts_with("# two materials, one per group of faces\nmtllib basic.mtl\n"),
+        "{obj_text}"
+    );
     std::fs::write(dir.join("basic.mtl"), &mtl_text).unwrap();
     std::fs::write(dir.join("model.obj"), &obj_text).unwrap();
 

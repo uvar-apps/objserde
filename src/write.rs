@@ -9,9 +9,11 @@
 //! trailing floats on `v`, `vt` arity, and the corner form (`i`, `i/vt`,
 //! `i//vn`, `i/vt/vn`) each corner used. Numbers use the shortest form that
 //! parses back to the same `f64`, so `parse(&obj.to_string())` yields
-//! bit-identical values. Byte equality with *another* producer is not promised,
-//! and neither is byte equality with the file the model came from: skipped
-//! records are gone, the record order is normalized, and `1.0` is written `1`.
+//! bit-identical values. The header comments come first, and `o`, `g` and
+//! `usemtl` lines appear among the faces wherever they change. Byte equality with
+//! *another* producer is not promised, and neither is byte equality with the file
+//! the model came from: skipped records are gone, the record order is normalized,
+//! and `1.0` is written `1`.
 //!
 //! **Mode B — canonical mesh form** ([`write_mesh`]): the fixed-precision output
 //! `molses` writes — one `v`/`vn` triple per line and `f a//a b//b c//c` faces.
@@ -26,14 +28,18 @@ use crate::mtl::{MapOption, Material};
 
 /// Mode A: every record in canonical layout, shape-preserving.
 ///
-/// `mtllib` lines come first, then `v`, `vt`, `vn`, then faces — with a `usemtl`
-/// line wherever the material changes, since in OBJ a material is state, not a
-/// per-face field.
+/// The header comments come first, then `mtllib` lines, then `v`, `vt`, `vn`,
+/// then faces — with an `o`, `g` or `usemtl` line wherever the object, group or
+/// material changes (in that order when several change at once), since in OBJ
+/// all three are state, not per-face fields.
 ///
 /// A face with no corners has nothing to address and writes nothing: the parser
 /// never produces one, and a bare `f` line would not read back as a face.
 impl fmt::Display for Obj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for comment in &self.header {
+            writeln!(f, "#{comment}")?;
+        }
         for lib in &self.material_libs {
             // Quote a path containing spaces so it reads back as one name.
             if lib.path.contains(char::is_whitespace) {
@@ -64,9 +70,25 @@ impl fmt::Display for Obj {
             writeln!(f, "vn {x} {y} {z}")?;
         }
         let mut current: Option<u32> = None;
+        let mut current_object: Option<u32> = None;
+        let mut current_group: Option<u32> = None;
         for face in &self.faces {
-            // Material changes are the only reason a non-geometry line appears
-            // among the faces; emit one exactly when it differs.
+            // State changes are the only reason a non-geometry line appears
+            // among the faces; emit each exactly when it differs. A change to
+            // `None` writes nothing: OBJ cannot clear an object, group or
+            // material, so the earlier one stays in effect when read back.
+            if face.object != current_object {
+                if let Some(name) = face.object.and_then(|i| self.objects.get(i as usize)) {
+                    write_state(f, "o", name)?;
+                }
+                current_object = face.object;
+            }
+            if face.group != current_group {
+                if let Some(names) = face.group.and_then(|i| self.groups.get(i as usize)) {
+                    write_state(f, "g", names)?;
+                }
+                current_group = face.group;
+            }
             if face.material != current {
                 if let Some(index) = face.material {
                     if let Some(material) = self.materials.get(index as usize) {
@@ -86,6 +108,16 @@ impl fmt::Display for Obj {
             writeln!(f)?;
         }
         Ok(())
+    }
+}
+
+/// Write an `o` or `g` line; an empty value is the bare keyword, which is how
+/// the parser reads it back.
+fn write_state(f: &mut fmt::Formatter<'_>, keyword: &str, value: &str) -> fmt::Result {
+    if value.is_empty() {
+        writeln!(f, "{keyword}")
+    } else {
+        writeln!(f, "{keyword} {value}")
     }
 }
 

@@ -7,7 +7,7 @@ crate with zero required dependencies.
 
 ```toml
 [dependencies]
-objserde = "0.2"
+objserde = "0.3"
 ```
 
 It exists because the same OBJ reader and writer kept being rewritten per
@@ -51,7 +51,7 @@ accident inside a loop.
 
 | | Type | Holds | Never does |
 |---|---|---|---|
-| **1 · raw model** | [`Obj`](https://docs.rs/objserde/latest/objserde/struct.Obj.html) | `v` lines with trailing floats, the `vn` table exactly as written (not unit), `vt` arity, whole polygons, each face's material, the `mtllib` references and the materials they resolved to | resolve a normal against a surface point |
+| **1 · raw model** | [`Obj`](https://docs.rs/objserde/latest/objserde/struct.Obj.html) | `v` lines with trailing floats, the `vn` table exactly as written (not unit), `vt` arity, whole polygons, each face's material, object and group, the `mtllib` references and the materials they resolved to, the header comments | resolve a normal against a surface point |
 | **2 · binding** | `BoundMesh` | positions, one unit normal per position, triangle indices | fail, or look at a material |
 | **3 · writers** | `obj.to_string()`, `write_mesh`, `write_material_lib` | deterministic bytes | add a timestamp, read a locale |
 
@@ -72,10 +72,13 @@ differently than documented.
 | `f c₁ c₂ …` | `Obj::faces` | Polygons, not pre-triangulated; 1- and 2-corner faces are kept |
 | `mtllib <files>` | `Obj::material_libs` | Each path, with whether it could be read; several files may share one line, and `"quoted names"` may contain spaces |
 | `usemtl <name>` | `Obj::materials`, `Face::material` | State: it applies to this face and every face after it, until the next `usemtl` |
+| `o <name>` | `Obj::objects`, `Face::object` | State, like `usemtl`; the table holds each name once, in order of first appearance |
+| `g <names>` | `Obj::groups`, `Face::group` | State, like `usemtl`; the names as written (`g hull left` → `"hull left"`, a bare `g` → `""`), each distinct line once |
+| `# …` before the first record | `Obj::header` | The text after `#`, verbatim; blank lines among them are dropped. Later comments are skipped |
 
 Prefixes are matched **exactly**: `v` must be followed by a space. So `vertex …`,
 `vnotavertex`, `v\t1 2 3` and ` v 1 2 3` (leading space) are not vertex lines —
-they are skipped, like every other line: comments, `g`, `o`, `s`, `vp`, blanks,
+they are skipped, like every other line: later comments, `s`, `vp`, blanks,
 unknown prefixes. Skipping is never an error, because an OBJ reader that dies on a
 record it doesn't model can't read most files in the wild.
 
@@ -204,8 +207,9 @@ Both are pinned by tests that fail loudly if reintroduced:
 
 ### Mode A — structural round trip (`obj.to_string()`)
 
-Writes every record in canonical layout — all `v`, then `vt`, then `vn`, then `f`
-— keeping each record's shape: trailing floats on `v`, `vt` arity, and the corner
+Writes every record in canonical layout — the header comments, then all `v`, then
+`vt`, then `vn`, then `f`, with `o`, `g` and `usemtl` lines where they change —
+keeping each record's shape: trailing floats on `v`, `vt` arity, and the corner
 form each corner used.
 
 Guaranteed: `parse(&obj.to_string())` yields **bit-identical values**, including
@@ -302,21 +306,22 @@ then compare `meshview::load_obj(p)` against `objserde::Obj::load(p)` with
 
 Stated because knowing them is the difference between a tool and a surprise.
 
-* **Skipped records do not round-trip.** Comments, `g`, `o`, `s`, `vp` and unknown
-  lines are not stored, so Mode A does not write them back. Mode A preserves the
+* **Skipped records do not round-trip.** Comments after the first record, `s`,
+  `vp` and unknown lines are not stored, so Mode A does not write them back. Mode A preserves the
   geometry and every field it models — not the file's text.
 * **Writing an OBJ carries material *references*, not definitions.** Those live in
   a separate `.mtl`: call `write_material_lib` and save it under the name the
   `mtllib` line gives. A model whose libraries were loaded therefore does not
   compare equal to one re-read from Mode A output alone — the geometry does; the
   shading definitions were in the other file.
-* **OBJ cannot clear a material.** `material: None` is expressible only before the
-  first `usemtl`. A hand-built model that goes material → none → material reads
-  back with the earlier material still in effect, which is what the format says.
+* **OBJ cannot clear a material, object or group.** `None` is expressible only
+  before the first `usemtl`, `o` or `g`. A hand-built model that goes material →
+  none → material reads back with the earlier material still in effect, which is
+  what the format says; the same holds for objects and groups.
 * **A material no face references is not written**, for the same reason: OBJ text
   has nowhere to put it.
-* **Groups (`g`/`o`) and smoothing groups (`s`) are still unmodelled**, and `bind`
-  ignores materials entirely — this is geometry plus shading, not a scene graph.
+* **Smoothing groups (`s`) are still unmodelled**, and `bind` ignores materials
+  and groups entirely — this is geometry plus shading, not a scene graph.
 * **Relative (negative) face indices are unsupported** — in the position field
   *and* in `vt`/`vn`, where the reference reader silently left them unbound.
   Refusing is the safer default: a dropped normal is exactly the quiet wrongness

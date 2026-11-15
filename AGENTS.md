@@ -65,12 +65,13 @@ cargo publish --dry-run                    # do NOT publish
   free at authoring time, API and sparse index both 404). Crates.io categories
   may still need adding via the web UI.
 * Toolchain: edition 2024, `rust-version = 1.85` (local 1.100).
-* Version `0.2.0`. The 0.1 → 0.2 step is breaking: `Obj` gained `materials` and
-  `material_libs`, and `Face` gained `material`, so downstream struct literals
-  without `..Default::default()` fail to compile.
-* Tests: 109 without features (111 with `serde`) — 22 parser contract, 23 MTL
+* Version `0.3.0`. The 0.2 → 0.3 step is breaking: `Obj` gained `header`,
+  `objects` and `groups`, and `Face` gained `object` and `group`, so downstream
+  struct literals without `..Default::default()` fail to compile (as in 0.1 → 0.2,
+  when `Obj` gained `materials` and `material_libs` and `Face` gained `material`).
+* Tests: 114 without features (116 with `serde`) — 25 parser contract, 23 MTL
   parser/writer, 20 materials/OBJ integration, 16 ported loader/sample, 11
-  binding, 6 round-trip properties, 9 writer, 2 doctests, plus 2 gating the
+  binding, 6 round-trip properties, 10 writer, 3 doctests, plus 2 gating the
   `serde` derives. Green with and without `--features serde`, in debug and
   release, **and on an unpacked `cargo package` tarball**, where the Stanford
   models are absent and their tests skip.
@@ -78,6 +79,10 @@ cargo publish --dry-run                    # do NOT publish
   21–26 ms, **parse + bind 420–435 ms** against the 1.2 s budget; `Obj::load` end
   to end 485–503 ms. Material support measured A/B against `ac35e00`: no
   difference beyond noise.
+  Objects, groups and header (0.3) measured A/B against `fe21aeb` on a 92 MB,
+  1.28 M-face sesmesh surface (parse + Mode A write, best of 5, alternating,
+  load average ≈ 7): 0.453–0.456 s → 0.464–0.470 s, about 2–3 % — the two extra
+  `Option<u32>` per face.
 * **Timing discipline (learned the hard way):** measure on an idle machine, and
   A/B against a baseline worktree (`git worktree add /tmp/base <sha>`) before
   crediting or blaming a change. Figures recorded in this repo's first draft were
@@ -151,9 +156,17 @@ line here.
   `Vertex::extra`.
 * **An `f ` line with no corner tokens produces no face**, and the writer emits
   nothing for a hand-built 0-corner `Face`, so writer output always re-parses.
-* **Comments / `g` / `o` / `s` / unknown lines are skipped and not
-  round-tripped.** A documented limit, not an oversight. (`usemtl`/`mtllib` left
-  this list in 0.2 — they are modelled now; see the materials decisions above.)
+* **`o`, `g` and the header comments are modelled since 0.3**
+  (`Obj::objects`/`Face::object`, `Obj::groups`/`Face::group`, `Obj::header`).
+  `o` and `g` are state like `usemtl`: tables in first-appearance order, the `g`
+  value kept as written (several names on one line stay one string, a bare `g` is
+  `""`), written where they change in the order `o`, `g`, `usemtl`. Names are
+  looked up through a `BTreeMap` during the parse (ordered, never iterated, no
+  hashing), because a file can carry thousands of groups. The header is the
+  comments before the first record, text after `#` verbatim, written back first.
+* **Later comments / `s` / unknown lines are skipped and not round-tripped.** A
+  documented limit, not an oversight. (`usemtl`/`mtllib` left this list in 0.2,
+  `o`/`g`/header comments in 0.3.)
 * **Parse errors name the line, not the file** (only `Io` carries a path), which
   is what keeps errors cheap. Callers add the path they know.
 

@@ -1,6 +1,6 @@
 [package]
 name = "objserde"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Loss-preserving Wavefront OBJ parser with MTL materials and texture references, a uvar normal-binding layer, and byte-deterministic writers, in std-only Rust"

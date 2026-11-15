@@ -6,7 +6,8 @@ use std::error::Error as _;
 use objserde::ObjError;
 
 /// Everything the model does not hold is skipped rather than fatal. (`usemtl`
-/// used to live in this list; it is modelled now — see tests/materials.rs.)
+/// used to live in this list; it is modelled now — see tests/materials.rs. So
+/// are `o`, `g` and the header comments since 0.3; they are asserted below.)
 #[test]
 fn unknown_and_unmodelled_records_are_skipped_not_fatal() {
     let src = "\
@@ -29,6 +30,73 @@ f 1 2 3
     assert_eq!(obj.faces.len(), 1);
     assert!(obj.normals.is_empty());
     assert!(obj.tex_coords.is_empty());
+    // The first comment is the header; `#{no space}` follows a record, so it is
+    // an ordinary skipped comment.
+    assert_eq!(obj.header, vec![" a comment".to_string()]);
+    assert_eq!(obj.object_of(&obj.faces[0]), Some("widget"));
+    assert_eq!(obj.group_of(&obj.faces[0]), Some("group_name"));
+}
+
+/// The header is every comment before the first record, the text after `#`
+/// kept verbatim; blank lines among them are dropped, and the header ends at
+/// the first line that is neither.
+#[test]
+fn the_header_is_the_comments_before_the_first_record() {
+    let src = "# sesmesh 1.1.2\n#\n\n## twice\n#  indented\nv 0 0 0\n# not header\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+    let obj = objserde::parse(src).unwrap();
+    assert_eq!(obj.header, [" sesmesh 1.1.2", "", "# twice", "  indented"]);
+
+    // A file that opens with a record has no header, even if comments follow.
+    let obj = objserde::parse("v 0 0 0\n# late\n").unwrap();
+    assert!(obj.header.is_empty());
+}
+
+/// `o` and `g` are state, like `usemtl`: each applies to every face after it
+/// until the next one. Their tables hold each distinct value once, in order of
+/// first appearance; a bare `g` is the empty name, and several names on one `g`
+/// line are kept as written.
+#[test]
+fn object_and_group_lines_are_state_for_the_faces_after_them() {
+    let src = "\
+v 0 0 0
+v 1 0 0
+v 0 1 0
+f 1 2 3
+o ses
+g component_0
+f 1 2 3
+f 1 2 3
+g cavity_1
+f 1 2 3
+g component_0
+f 1 2 3
+g hull   left  \n\
+f 1 2 3
+g
+f 1 2 3
+";
+    let obj = objserde::parse(src).unwrap();
+    assert_eq!(obj.objects, ["ses"]);
+    assert_eq!(obj.groups, ["component_0", "cavity_1", "hull   left", ""]);
+    let groups: Vec<Option<u32>> = obj.faces.iter().map(|f| f.group).collect();
+    assert_eq!(
+        groups,
+        [None, Some(0), Some(0), Some(1), Some(0), Some(2), Some(3)]
+    );
+    assert_eq!(obj.faces[0].object, None, "before the first `o`");
+    assert!(obj.faces[1..].iter().all(|f| f.object == Some(0)));
+    assert_eq!(obj.group_of(&obj.faces[5]), Some("hull   left"));
+}
+
+/// The keyword must start the line and be followed by a space or end it.
+#[test]
+fn group_and_object_keywords_match_exactly() {
+    let obj =
+        objserde::parse("v 0 0 0\nv 1 0 0\nv 0 1 0\ngroup x\n g y\nobject z\ng\tw\nf 1 2 3\n")
+            .unwrap();
+    assert!(obj.groups.is_empty(), "{:?}", obj.groups);
+    assert!(obj.objects.is_empty(), "{:?}", obj.objects);
+    assert_eq!(obj.faces[0].group, None);
 }
 
 #[test]

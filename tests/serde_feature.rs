@@ -36,6 +36,7 @@ fn serde_uses_the_core_types_without_the_feature() {
     // The same construction has to compile either way: the feature only adds
     // derives, it changes no shape.
     let obj = Obj {
+        header: vec![" made by hand".into()],
         vertices: vec![Vertex::new([1.0, 2.0, 3.0])],
         normals: vec![[0.0, 0.0, 1.0]],
         tex_coords: vec![TexCoord::new(&[0.5, 0.5]).unwrap()],
@@ -45,6 +46,8 @@ fn serde_uses_the_core_types_without_the_feature() {
                 vt: Some(0),
                 vn: Some(0),
             }],
+            object: Some(0),
+            group: Some(0),
             ..Default::default()
         }],
         material_libs: vec![MaterialLib {
@@ -62,8 +65,12 @@ fn serde_uses_the_core_types_without_the_feature() {
             }],
             ..Default::default()
         }],
+        objects: vec!["protein".into()],
+        groups: vec!["component_0".into()],
     };
     assert_eq!(obj.bind().triangle_count(), 0);
+    assert_eq!(obj.object_of(&obj.faces[0]), Some("protein"));
+    assert_eq!(obj.group_of(&obj.faces[0]), Some("component_0"));
     assert_eq!(obj.material_libs[0].status, LibraryStatus::Unresolved);
     assert_eq!(obj.materials[0].maps[0].kind, MapKind::Diffuse);
     assert_eq!(obj.faces[0].corners[0].vn, Some(0));

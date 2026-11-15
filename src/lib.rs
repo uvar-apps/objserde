@@ -9,7 +9,7 @@
 //!
 //! | Layer | Type | Keeps | Deliberately does not |
 //! |---|---|---|---|
-//! | 1 · raw model | [`Obj`] | every `v`/`vn`/`vt`/`f` record read, in file order, polygons whole, each face under its material | resolve a normal against a surface point |
+//! | 1 · raw model | [`Obj`] | every `v`/`vn`/`vt`/`f` record read, in file order, polygons whole, each face under its material, object and group, the header comments | resolve a normal against a surface point |
 //! | 2 · binding | [`BoundMesh`] | one unit normal per position, triangle indices | read a material, or fail |
 //! | 3 · writers | `obj.to_string()`, [`write_mesh`], [`write_material_lib`] | the same bytes every run | carry a timestamp or a locale |
 //!
@@ -78,13 +78,34 @@
 //! with `material: None` following a referenced one inherits the previous material
 //! when the text is re-read.
 //!
+//! # Objects, groups and the header
+//!
+//! `o` and `g` are state too: [`Face::object`] and [`Face::group`] index
+//! [`Obj::objects`] and [`Obj::groups`], tables that hold each distinct value once
+//! in order of first appearance, and the writer emits `o` and `g` where they
+//! change. A mesh split into named groups — one per connected component, say —
+//! keeps its groups through a round trip. The comment lines before the first
+//! record are [`Obj::header`]: a file's provenance (the program that wrote it,
+//! its parameters) survives a rewrite, and the writer puts it back first.
+//!
+//! ```
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let src = "# made by hand\nv 0 0 0\nv 1 0 0\nv 0 1 0\ng component_0\nf 1 2 3\n";
+//! let obj = objserde::parse(src)?;
+//! assert_eq!(obj.header, [" made by hand"]);
+//! assert_eq!(obj.group_of(&obj.faces[0]), Some("component_0"));
+//! assert_eq!(obj.to_string(), "# made by hand\nv 0 0 0\nv 1 0 0\nv 0 1 0\ng component_0\nf 1 2 3\n");
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! # Which lines are read
 //!
-//! `v`, `vn`, `vt`, `f`, `usemtl`, `mtllib` — matched as exact line prefixes, one
-//! record per line. Every other line is skipped: comments, `g`, `o`, `s`, `vp`,
-//! blanks, unknown prefixes, and anything with leading whitespace before the
-//! keyword. Skipping is not an error, but a skipped line is **not** round-tripped:
-//! v1 stores six record types and writes those back.
+//! `v`, `vn`, `vt`, `f`, `usemtl`, `mtllib`, `o`, `g` — matched as exact line
+//! prefixes, one record per line — and the comments before the first record.
+//! Every other line is skipped: later comments, `s`, `vp`, blanks, unknown
+//! prefixes, and anything with leading whitespace before the keyword. Skipping is
+//! not an error, but a skipped line is **not** round-tripped.
 //!
 //! # The binding rules, and why they exist
 //!
@@ -118,13 +139,16 @@
 //!
 //! # Limits, stated plainly
 //!
-//! * Skipped records (comments, `g`, `o`, `s`, `vp`/`curv`/… ) do not survive a
-//!   round trip. Materials and their references **do** — see above.
+//! * Skipped records (comments after the first record, `s`, `vp`/`curv`/… ) do
+//!   not survive a round trip. Materials, objects, groups and the header
+//!   comments **do** — see above.
 //! * Face indices use the `u32` space; a file with more than 2^32 vertices is not
 //!   addressable.
-//! * Groups (`g`/`o`) and smoothing groups (`s`) are still not modelled, and
-//!   `bind` knows nothing about materials: this is geometry plus shading, not a
-//!   scene graph.
+//! * Smoothing groups (`s`) are still not modelled, and `bind` knows nothing
+//!   about materials or groups: this is geometry plus shading, not a scene graph.
+//! * OBJ cannot clear an object or group any more than a material: a hand-built
+//!   face with `None` after one that had a value reads back with the earlier
+//!   value in effect.
 //! * Mode A writes the shortest round-trip float form, which is not the form the
 //!   input file used. Re-parsing is exact; diffing against the original text is
 //!   not the point.

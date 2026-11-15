@@ -36,6 +36,20 @@ fn index_below(upper: usize) -> impl Strategy<Value = u32> {
     0..(upper.max(1) as u32)
 }
 
+/// Group lines the generator picks from: one name, several names on one line,
+/// and the bare `g` (the empty value).
+const GROUP_NAMES: [&str; 4] = ["component_0", "cavity_1", "hull left", ""];
+
+/// The table index of `name`, appended on first use — the order a re-parse
+/// builds the object and group tables in.
+fn first_use(table: &mut Vec<String>, name: &str) -> u32 {
+    let index = table.iter().position(|n| n == name).unwrap_or_else(|| {
+        table.push(name.to_string());
+        table.len() - 1
+    });
+    index as u32
+}
+
 /// A model with at least one vertex (a model with none cannot be re-read, that
 /// is `NoVertices`) and every reference inside its tables.
 fn arb_obj() -> impl Strategy<Value = Obj> {
@@ -61,8 +75,22 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                     1..5,
                 ),
                 prop::option::weighted(0.4, 0u32..3),
+                // Object and group switches, generated as state like materials.
+                prop::option::weighted(0.3, 0u32..2),
+                prop::option::weighted(0.4, 0usize..GROUP_NAMES.len()),
             ),
             0..4,
+        );
+        // Header comments: the text after `#`, including the empty comment, a
+        // leading space and a second `#`.
+        let header = prop::collection::vec(
+            prop_oneof![
+                Just(" sesmesh 1.1.2".to_string()),
+                Just(String::new()),
+                Just("# doubled".to_string()),
+                Just(" area_A2: 2314.2175  volume_A3: 4662.7007".to_string()),
+            ],
+            0..3,
         );
         // Library paths, including ones with spaces (which the writer must quote
         // so they read back as a single name).
@@ -75,8 +103,8 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
             ],
             0..3,
         );
-        (vertices, normals, tex, faces, lib_names).prop_map(
-            move |(vertices, normals, tex, faces, lib_names)| {
+        (vertices, normals, tex, faces, lib_names, header).prop_map(
+            move |(vertices, normals, tex, faces, lib_names, header)| {
                 // Materials in OBJ are *state*: `usemtl` sets it for every face
                 // that follows. Generate it that way so the model a writer can
                 // actually reproduce is the model being tested — and so the
@@ -84,8 +112,18 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                 // builds it.
                 let mut materials: Vec<Material> = Vec::new();
                 let mut current: Option<u32> = None;
+                let mut objects: Vec<String> = Vec::new();
+                let mut current_object: Option<u32> = None;
+                let mut groups: Vec<String> = Vec::new();
+                let mut current_group: Option<u32> = None;
                 let mut out_faces = Vec::with_capacity(faces.len());
-                for (corners, switch) in faces {
+                for (corners, switch, object_switch, group_switch) in faces {
+                    if let Some(want) = object_switch {
+                        current_object = Some(first_use(&mut objects, &format!("obj{want}")));
+                    }
+                    if let Some(want) = group_switch {
+                        current_group = Some(first_use(&mut groups, GROUP_NAMES[want]));
+                    }
                     if let Some(want) = switch {
                         let name = format!("mat{want}");
                         let index = match materials.iter().position(|m| m.name == name) {
@@ -103,9 +141,12 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                             .map(|(v, vt, vn)| Corner { v, vt, vn })
                             .collect(),
                         material: current,
+                        object: current_object,
+                        group: current_group,
                     });
                 }
                 Obj {
+                    header,
                     vertices: vertices
                         .into_iter()
                         .map(|(position, extra)| Vertex { position, extra })
@@ -124,6 +165,8 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                         })
                         .collect(),
                     materials,
+                    objects,
+                    groups,
                 }
             },
         )

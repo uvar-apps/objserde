@@ -4,9 +4,10 @@
 //! their trailing floats, the `vn` table keeps the values written (they are
 //! **not** normalized here — see [`Obj::bind`](crate::Obj::bind)), `vt` lines
 //! keep their arity, faces keep all their corners instead of being
-//! pre-triangulated, and each face remembers the material it was drawn under.
-//! Nothing in this layer resolves a normal against a position; that is the
-//! binding layer's job.
+//! pre-triangulated, and each face remembers the material, object and group it
+//! was drawn under. The comment lines before the first record are kept as the
+//! file's header. Nothing in this layer resolves a normal against a position;
+//! that is the binding layer's job.
 
 use crate::mtl::{Material, MaterialLib};
 
@@ -14,6 +15,10 @@ use crate::mtl::{Material, MaterialLib};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Obj {
+    /// The comment lines before the first record, in file order: the text after
+    /// each line's `#`, verbatim. Blank lines among them are not kept, and
+    /// comments after the first record are skipped like any other unmodelled line.
+    pub header: Vec<String>,
     /// One entry per `v` line, in file order.
     pub vertices: Vec<Vertex>,
     /// One `[x, y, z]` per `vn` line, in file order, **as written** (exported
@@ -31,6 +36,13 @@ pub struct Obj {
     /// entry per `usemtl` name that no loaded library defines (see
     /// [`Material::defined`]). Indexed by [`Face::material`].
     pub materials: Vec<Material>,
+    /// The object table: one entry per distinct `o` name, in order of first
+    /// appearance. Indexed by [`Face::object`].
+    pub objects: Vec<String>,
+    /// The group table: one entry per distinct `g` line, its names as written
+    /// (`g hull left` gives `"hull left"`, a bare `g` gives `""`), in order of
+    /// first appearance. Indexed by [`Face::group`].
+    pub groups: Vec<String>,
 }
 
 impl Obj {
@@ -50,6 +62,23 @@ impl Obj {
             .iter()
             .position(|m| m.name == name)
             .map(|i| i as u32)
+    }
+
+    /// The name of the object a face belongs to, if an `o` line preceded it.
+    #[must_use]
+    pub fn object_of(&self, face: &Face) -> Option<&str> {
+        face.object
+            .and_then(|i| self.objects.get(i as usize))
+            .map(String::as_str)
+    }
+
+    /// The group names a face belongs to, as the `g` line wrote them, if one
+    /// preceded it.
+    #[must_use]
+    pub fn group_of(&self, face: &Face) -> Option<&str> {
+        face.group
+            .and_then(|i| self.groups.get(i as usize))
+            .map(String::as_str)
     }
 
     /// Faces drawn under the material at `index`, in file order.
@@ -136,8 +165,8 @@ impl TexCoord {
     }
 }
 
-/// An `f` line: its corners, unreordered and un-triangulated, plus the material
-/// in effect when the face was written.
+/// An `f` line: its corners, unreordered and un-triangulated, plus the material,
+/// object and group in effect when the face was written.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Face {
@@ -147,6 +176,12 @@ pub struct Face {
     /// Index into [`Obj::materials`] — the material set by the last `usemtl`
     /// line before this face, or `None` if nothing was in effect.
     pub material: Option<u32>,
+    /// Index into [`Obj::objects`] — the object named by the last `o` line
+    /// before this face, or `None` if there was none.
+    pub object: Option<u32>,
+    /// Index into [`Obj::groups`] — the group set by the last `g` line before
+    /// this face, or `None` if there was none.
+    pub group: Option<u32>,
 }
 
 impl Face {

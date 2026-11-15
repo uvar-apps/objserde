@@ -1,16 +1,18 @@
 //! Layer 1: the loss-preserving parser.
 //!
 //! A plain std line scanner. Records are recognised by their exact line prefix
-//! — `v `, `vn `, `vt `, `f ` — and everything else (comments, `usemtl`, `g`,
-//! `o`, `s`, blanks, unknown prefixes) is skipped: a reader that dies on a
-//! record it does not model cannot read most OBJ files in the wild. Skipped
-//! lines are not stored, so they are **not** round-tripped; the crate docs
-//! carry the full contract.
+//! — `v `, `vn `, `vt `, `f `, `usemtl `, `mtllib `, `o`, `g` — and the
+//! comment lines before the first record are kept as the header. Everything
+//! else (later comments, `s`, blanks, unknown prefixes) is skipped: a reader
+//! that dies on a record it does not model cannot read most OBJ files in the
+//! wild. Skipped lines are not stored, so they are **not** round-tripped; the
+//! crate docs carry the full contract.
 //!
 //! Ordinary face indices are not resolved while reading. They are validated at
 //! end-of-parse against the finished tables, which is what lets every offending
 //! face report its own line instead of the first failure shadowing the rest.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::bind::BoundMesh;
@@ -92,16 +94,36 @@ pub fn parse(text: &str) -> Result<Obj, ObjError> {
     let mut obj = Obj::default();
     // Source line per face, kept only for the end-of-parse index check.
     let mut face_lines: Vec<usize> = Vec::new();
-    // The material in effect for faces that follow, as `usemtl` sets it.
+    // The material, object and group in effect for faces that follow, as
+    // `usemtl`, `o` and `g` set them.
     let mut current_material: Option<u32> = None;
+    let mut current_object: Option<u32> = None;
+    let mut current_group: Option<u32> = None;
+    // Name → table index for `o` and `g`. A file may carry thousands of groups
+    // (one per mesh component), so lookup is ordered rather than linear; a
+    // BTreeMap keeps hashing out of the read path, and it is never iterated.
+    let mut object_index: BTreeMap<String, u32> = BTreeMap::new();
+    let mut group_index: BTreeMap<String, u32> = BTreeMap::new();
+    // Comments are the header until the first line that is neither a comment
+    // nor blank.
+    let mut in_header = true;
 
     for (idx, line) in text.lines().enumerate() {
         let line_no = idx + 1;
+        if in_header {
+            if let Some(comment) = line.strip_prefix('#') {
+                obj.header.push(comment.to_string());
+                continue;
+            }
+            in_header = line.trim().is_empty();
+        }
         if let Some(rest) = line.strip_prefix("v ") {
             obj.vertices.push(read_vertex(line_no, rest)?);
         } else if let Some(rest) = line.strip_prefix("f ") {
             if let Some(mut face) = read_face(line_no, rest, obj.vertices.len())? {
                 face.material = current_material;
+                face.object = current_object;
+                face.group = current_group;
                 obj.faces.push(face);
                 face_lines.push(line_no);
             }
@@ -119,8 +141,12 @@ pub fn parse(text: &str) -> Result<Obj, ObjError> {
                     status: LibraryStatus::Unresolved,
                 });
             }
+        } else if let Some(names) = record_value(line, "g") {
+            current_group = Some(intern(&mut obj.groups, &mut group_index, names));
+        } else if let Some(name) = record_value(line, "o") {
+            current_object = Some(intern(&mut obj.objects, &mut object_index, name));
         }
-        // Comments, groups, unknown records: skipped, not fatal.
+        // Later comments, smoothing groups, unknown records: skipped, not fatal.
     }
 
     if obj.vertices.is_empty() {
@@ -128,6 +154,31 @@ pub fn parse(text: &str) -> Result<Obj, ObjError> {
     }
     check_face_indices(&obj, &face_lines)?;
     Ok(obj)
+}
+
+/// The value of an `o`/`g` line: the rest of the line after the keyword and one
+/// space, trimmed, or `""` for the bare keyword. Like every other record, the
+/// keyword must start the line and be followed by a space, so `gx` and ` g a`
+/// are not group lines.
+fn record_value<'a>(line: &'a str, keyword: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(keyword)?;
+    if rest.is_empty() {
+        Some("")
+    } else {
+        rest.strip_prefix(' ').map(str::trim)
+    }
+}
+
+/// The table index of `name`, appending it on first sight.
+fn intern(table: &mut Vec<String>, index: &mut BTreeMap<String, u32>, name: &str) -> u32 {
+    if let Some(&i) = index.get(name) {
+        return i;
+    }
+    // Same `u32` addressing rule as every other table.
+    let i = table.len() as u32;
+    table.push(name.to_string());
+    index.insert(name.to_string(), i);
+    i
 }
 
 /// A `usemtl` name as a table index: an existing entry if the name is known,
@@ -204,6 +255,8 @@ fn read_face(line: usize, rest: &str, vertex_count: usize) -> Result<Option<Face
     Ok(Some(Face {
         corners,
         material: None,
+        object: None,
+        group: None,
     }))
 }
 
