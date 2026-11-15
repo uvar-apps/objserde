@@ -59,11 +59,10 @@ cargo publish --dry-run                    # do NOT publish
 
 ## Status
 
-* Repo: `github.com/uvar-apps/objserde` (public, `origin`), branch `main`,
-  pushed. **Not published to crates.io** — that is a separate, explicit
-  per-version decision (`cargo publish --dry-run` passes; the name was verified
-  free at authoring time, API and sparse index both 404). Crates.io categories
-  may still need adding via the web UI.
+* Repo: `github.com/uvar-apps/objserde` (public, `origin`), branch `main`.
+  On crates.io: 0.2.0 (tag `v0.2.0`) and 0.3.0 (published 2026-11-15, from
+  `fd5e5e1`). Each publish is a separate, explicit per-version decision of the
+  user. Crates.io categories may still need adding via the web UI.
 * Toolchain: edition 2024, `rust-version = 1.85` (local 1.100).
 * Version `0.3.0`. The 0.2 → 0.3 step is breaking: `Obj` gained `header`,
   `objects` and `groups`, and `Face` gained `object` and `group`, so downstream
