@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "Loss-preserving Wavefront OBJ parser with MTL materials and texture references, a uvar normal-binding layer, and byte-deterministic writers, in std-only Rust"
 license = "MIT OR Apache-2.0"
+authors = ["Ugo Varetto"]
 repository = "https://github.com/uvar-apps/objserde"
 readme = "README.md"
 keywords = ["obj", "wavefront", "mesh", "parser", "3d"]
