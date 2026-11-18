@@ -72,11 +72,15 @@ impl fmt::Display for Obj {
         let mut current: Option<u32> = None;
         let mut current_object: Option<u32> = None;
         let mut current_group: Option<u32> = None;
+        let mut current_smooth: Option<u32> = None;
         for face in &self.faces {
             // State changes are the only reason a non-geometry line appears
             // among the faces; emit each exactly when it differs. A change to
             // `None` writes nothing: OBJ cannot clear an object, group or
             // material, so the earlier one stays in effect when read back.
+            // Smoothing can be cleared, but it is cleared by a *value* — `s off`
+            // or `s 0` — which is interned and emitted like any other, so the
+            // same rule holds and a file that never said `s` still never does.
             if face.object != current_object {
                 if let Some(name) = face.object.and_then(|i| self.objects.get(i as usize)) {
                     write_state(f, "o", name)?;
@@ -88,6 +92,15 @@ impl fmt::Display for Obj {
                     write_state(f, "g", names)?;
                 }
                 current_group = face.group;
+            }
+            if face.smooth_group != current_smooth {
+                if let Some(value) = face
+                    .smooth_group
+                    .and_then(|i| self.smooth_groups.get(i as usize))
+                {
+                    write_state(f, "s", value)?;
+                }
+                current_smooth = face.smooth_group;
             }
             if face.material != current {
                 if let Some(index) = face.material {
@@ -111,7 +124,7 @@ impl fmt::Display for Obj {
     }
 }
 
-/// Write an `o` or `g` line; an empty value is the bare keyword, which is how
+/// Write an `o`, `g` or `s` line; an empty value is the bare keyword, which is how
 /// the parser reads it back.
 fn write_state(f: &mut fmt::Formatter<'_>, keyword: &str, value: &str) -> fmt::Result {
     if value.is_empty() {

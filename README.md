@@ -78,7 +78,7 @@ differently than documented.
 
 Prefixes are matched **exactly**: `v` must be followed by a space. So `vertex …`,
 `vnotavertex`, `v\t1 2 3` and ` v 1 2 3` (leading space) are not vertex lines —
-they are skipped, like every other line: later comments, `s`, `vp`, blanks,
+they are skipped, like every other line: later comments, `vp`, blanks,
 unknown prefixes. Skipping is never an error, because an OBJ reader that dies on a
 record it doesn't model can't read most files in the wild.
 
@@ -317,11 +317,15 @@ Stated because knowing them is the difference between a tool and a surprise.
 * **OBJ cannot clear a material, object or group.** `None` is expressible only
   before the first `usemtl`, `o` or `g`. A hand-built model that goes material →
   none → material reads back with the earlier material still in effect, which is
-  what the format says; the same holds for objects and groups.
+  what the format says; the same holds for objects and groups. Smoothing is the
+  exception, and it is a value: `s off`.
 * **A material no face references is not written**, for the same reason: OBJ text
   has nowhere to put it.
-* **Smoothing groups (`s`) are still unmodelled**, and `bind` ignores materials
-  and groups entirely — this is geometry plus shading, not a scene graph.
+* **Smoothing groups (`s`) are stored, never interpreted.** `s 12`, `s off` and
+  `s 0` are three distinct strings in `Obj::smooth_groups`, written back where
+  they change; what each means to a renderer is not this crate's question. `bind`
+  ignores materials, groups and smoothing entirely — this is geometry plus
+  shading, not a scene graph.
 * **Relative (negative) face indices are unsupported** — in the position field
   *and* in `vt`/`vn`, where the reference reader silently left them unbound.
   Refusing is the safer default: a dropped normal is exactly the quiet wrongness

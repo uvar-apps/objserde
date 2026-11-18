@@ -43,6 +43,15 @@ pub struct Obj {
     /// (`g hull left` gives `"hull left"`, a bare `g` gives `""`), in order of
     /// first appearance. Indexed by [`Face::group`].
     pub groups: Vec<String>,
+    /// The smoothing table: one entry per distinct `s` value, **as written** —
+    /// `s 12` gives `"12"`, `s off` gives `"off"` — in order of first
+    /// appearance. Indexed by [`Face::smooth_group`].
+    ///
+    /// Nothing here interprets the value. OBJ spells "no smoothing" several
+    /// ways (`s off`, `s 0`, `s false` in the wild), and deciding what a given
+    /// token means is a shading policy, not a serialization one: the crate's
+    /// job is that a file's smoothing statements survive a round trip.
+    pub smooth_groups: Vec<String>,
 }
 
 impl Obj {
@@ -78,6 +87,21 @@ impl Obj {
     pub fn group_of(&self, face: &Face) -> Option<&str> {
         face.group
             .and_then(|i| self.groups.get(i as usize))
+            .map(String::as_str)
+    }
+
+    /// The smoothing value a face was written under, as the `s` line spelled it
+    /// (`"12"`, `"off"`), if the file had one before it.
+    ///
+    /// ```
+    /// let obj = objserde::parse("# m\nv 0 0 0\nv 1 0 0\nv 0 1 0\ns 3\nf 1 2 3\n").unwrap();
+    /// assert_eq!(obj.smooth_groups, ["3"]);
+    /// assert_eq!(obj.smooth_group_of(&obj.faces[0]), Some("3"));
+    /// ```
+    #[must_use]
+    pub fn smooth_group_of(&self, face: &Face) -> Option<&str> {
+        face.smooth_group
+            .and_then(|i| self.smooth_groups.get(i as usize))
             .map(String::as_str)
     }
 
@@ -182,6 +206,11 @@ pub struct Face {
     /// Index into [`Obj::groups`] — the group set by the last `g` line before
     /// this face, or `None` if there was none.
     pub group: Option<u32>,
+    /// Index into [`Obj::smooth_groups`] — the smoothing value set by the last
+    /// `s` line before this face, or `None` if the file never wrote one.
+    /// `None` is not "off": it is "this file said nothing about smoothing", and
+    /// the writer keeps them apart by emitting no `s` line at all.
+    pub smooth_group: Option<u32>,
 }
 
 impl Face {

@@ -61,16 +61,21 @@ cargo publish --dry-run                    # do NOT publish
 
 * Repo: `github.com/uvar-apps/objserde` (public, `origin`), branch `main`.
   On crates.io: 0.2.0 (tag `v0.2.0`) and 0.3.0 (published 2026-11-15, from
-  `fd5e5e1`). Each publish is a separate, explicit per-version decision of the
-  user. Crates.io categories may still need adding via the web UI.
+  `fd5e5e1`). `0.4.0` is committed locally and **not yet published** — each
+  publish is a separate, explicit per-version decision of the user. Crates.io
+  categories may still need adding via the web UI.
 * Toolchain: edition 2024, `rust-version = 1.85` (local 1.100).
-* Version `0.3.0`. The 0.2 → 0.3 step is breaking: `Obj` gained `header`,
-  `objects` and `groups`, and `Face` gained `object` and `group`, so downstream
+* Version `0.4.0`. The 0.3 → 0.4 step is breaking in the same way 0.2 → 0.3 was:
+  `Obj` gained `smooth_groups` and `Face` gained `smooth_group`, so downstream
   struct literals without `..Default::default()` fail to compile (as in 0.1 → 0.2,
-  when `Obj` gained `materials` and `material_libs` and `Face` gained `material`).
-* Tests: 114 without features (116 with `serde`) — 25 parser contract, 23 MTL
+  when `Obj` gained `materials` and `material_libs` and `Face` gained `material`,
+  and 0.2 → 0.3 with `header`/`objects`/`groups`). Smoothing values are stored
+  verbatim and never interpreted; Mode A writes them where they change, in the
+  order `o`, `g`, `s`, `usemtl`, and a model with no smoothing writes none — so
+  output for smoothing-free files is unchanged byte for byte.
+* Tests: 117 without features (119 with `serde`) — 26 parser contract, 23 MTL
   parser/writer, 20 materials/OBJ integration, 16 ported loader/sample, 11
-  binding, 6 round-trip properties, 10 writer, 3 doctests, plus 2 gating the
+  binding, 6 round-trip properties, 11 writer, 3 doctests, plus 2 gating the
   `serde` derives. Green with and without `--features serde`, in debug and
   release, **and on an unpacked `cargo package` tarball**, where the Stanford
   models are absent and their tests skip.
@@ -157,15 +162,16 @@ line here.
   nothing for a hand-built 0-corner `Face`, so writer output always re-parses.
 * **`o`, `g` and the header comments are modelled since 0.3**
   (`Obj::objects`/`Face::object`, `Obj::groups`/`Face::group`, `Obj::header`).
-  `o` and `g` are state like `usemtl`: tables in first-appearance order, the `g`
-  value kept as written (several names on one line stay one string, a bare `g` is
-  `""`), written where they change in the order `o`, `g`, `usemtl`. Names are
-  looked up through a `BTreeMap` during the parse (ordered, never iterated, no
-  hashing), because a file can carry thousands of groups. The header is the
-  comments before the first record, text after `#` verbatim, written back first.
-* **Later comments / `s` / unknown lines are skipped and not round-tripped.** A
+  `o`, `g` and `s` are state like `usemtl`: tables in first-appearance order, the
+  value kept as written (several names on one line stay one string, a bare keyword
+  is `""`, and `s off` / `s 0` / `s 12` are three distinct uninterpreted strings),
+  written where they change in the order `o`, `g`, `s`, `usemtl`. Names are looked
+  up through a `BTreeMap` during the parse (ordered, never iterated, no hashing),
+  because a file can carry thousands of groups. The header is the comments before
+  the first record, text after `#` verbatim, written back first.
+* **Later comments / `vp` / unknown lines are skipped and not round-tripped.** A
   documented limit, not an oversight. (`usemtl`/`mtllib` left this list in 0.2,
-  `o`/`g`/header comments in 0.3.)
+  `o`/`g`/header comments in 0.3, `s` in 0.4.)
 * **Parse errors name the line, not the file** (only `Io` carries a path), which
   is what keeps errors cheap. Callers add the path they know.
 

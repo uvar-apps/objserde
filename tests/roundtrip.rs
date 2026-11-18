@@ -40,6 +40,11 @@ fn index_below(upper: usize) -> impl Strategy<Value = u32> {
 /// and the bare `g` (the empty value).
 const GROUP_NAMES: [&str; 4] = ["component_0", "cavity_1", "hull left", ""];
 
+/// Smoothing values, as written after `s` — including the two spellings readers
+/// treat as "off" and the bare keyword. The model is expected to carry these
+/// verbatim; the crate never interprets them.
+const SMOOTH_VALUES: [&str; 4] = ["1", "off", "12", ""];
+
 /// The table index of `name`, appended on first use — the order a re-parse
 /// builds the object and group tables in.
 fn first_use(table: &mut Vec<String>, name: &str) -> u32 {
@@ -78,6 +83,8 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                 // Object and group switches, generated as state like materials.
                 prop::option::weighted(0.3, 0u32..2),
                 prop::option::weighted(0.4, 0usize..GROUP_NAMES.len()),
+                // Smoothing is state too, and its value is carried verbatim.
+                prop::option::weighted(0.35, 0usize..SMOOTH_VALUES.len()),
             ),
             0..4,
         );
@@ -116,13 +123,18 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                 let mut current_object: Option<u32> = None;
                 let mut groups: Vec<String> = Vec::new();
                 let mut current_group: Option<u32> = None;
+                let mut smooth_groups: Vec<String> = Vec::new();
+                let mut current_smooth: Option<u32> = None;
                 let mut out_faces = Vec::with_capacity(faces.len());
-                for (corners, switch, object_switch, group_switch) in faces {
+                for (corners, switch, object_switch, group_switch, smooth_switch) in faces {
                     if let Some(want) = object_switch {
                         current_object = Some(first_use(&mut objects, &format!("obj{want}")));
                     }
                     if let Some(want) = group_switch {
                         current_group = Some(first_use(&mut groups, GROUP_NAMES[want]));
+                    }
+                    if let Some(want) = smooth_switch {
+                        current_smooth = Some(first_use(&mut smooth_groups, SMOOTH_VALUES[want]));
                     }
                     if let Some(want) = switch {
                         let name = format!("mat{want}");
@@ -143,6 +155,7 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                         material: current,
                         object: current_object,
                         group: current_group,
+                        smooth_group: current_smooth,
                     });
                 }
                 Obj {
@@ -167,6 +180,7 @@ fn arb_obj() -> impl Strategy<Value = Obj> {
                     materials,
                     objects,
                     groups,
+                    smooth_groups,
                 }
             },
         )

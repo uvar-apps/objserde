@@ -48,6 +48,7 @@ fn serde_uses_the_core_types_without_the_feature() {
             }],
             object: Some(0),
             group: Some(0),
+            smooth_group: Some(0),
             ..Default::default()
         }],
         material_libs: vec![MaterialLib {
@@ -67,6 +68,7 @@ fn serde_uses_the_core_types_without_the_feature() {
         }],
         objects: vec!["protein".into()],
         groups: vec!["component_0".into()],
+        smooth_groups: vec!["off".into()],
     };
     assert_eq!(obj.bind().triangle_count(), 0);
     assert_eq!(obj.object_of(&obj.faces[0]), Some("protein"));

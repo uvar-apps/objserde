@@ -80,13 +80,14 @@
 //!
 //! # Objects, groups and the header
 //!
-//! `o` and `g` are state too: [`Face::object`] and [`Face::group`] index
-//! [`Obj::objects`] and [`Obj::groups`], tables that hold each distinct value once
-//! in order of first appearance, and the writer emits `o` and `g` where they
-//! change. A mesh split into named groups — one per connected component, say —
-//! keeps its groups through a round trip. The comment lines before the first
-//! record are [`Obj::header`]: a file's provenance (the program that wrote it,
-//! its parameters) survives a rewrite, and the writer puts it back first.
+//! `o`, `g` and `s` are state too: [`Face::object`], [`Face::group`] and
+//! [`Face::smooth_group`] index [`Obj::objects`], [`Obj::groups`] and
+//! [`Obj::smooth_groups`], tables that hold each distinct value once in order of
+//! first appearance, and the writer emits `o`, `g` and `s` where they change. A
+//! mesh split into named groups — one per connected component, say — keeps its
+//! groups through a round trip. The comment lines before the first record are
+//! [`Obj::header`]: a file's provenance (the program that wrote it, its
+//! parameters) survives a rewrite, and the writer puts it back first.
 //!
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -101,9 +102,9 @@
 //!
 //! # Which lines are read
 //!
-//! `v`, `vn`, `vt`, `f`, `usemtl`, `mtllib`, `o`, `g` — matched as exact line
-//! prefixes, one record per line — and the comments before the first record.
-//! Every other line is skipped: later comments, `s`, `vp`, blanks, unknown
+//! `v`, `vn`, `vt`, `f`, `usemtl`, `mtllib`, `o`, `g`, `s` — matched as exact
+//! line prefixes, one record per line — and the comments before the first
+//! record. Every other line is skipped: later comments, `vp`, blanks, unknown
 //! prefixes, and anything with leading whitespace before the keyword. Skipping is
 //! not an error, but a skipped line is **not** round-tripped.
 //!
@@ -139,13 +140,15 @@
 //!
 //! # Limits, stated plainly
 //!
-//! * Skipped records (comments after the first record, `s`, `vp`/`curv`/… ) do
-//!   not survive a round trip. Materials, objects, groups and the header
-//!   comments **do** — see above.
+//! * Skipped records (comments after the first record, `vp`/`curv`/… ) do not
+//!   survive a round trip. Materials, objects, groups, smoothing values and the
+//!   header comments **do** — see above.
 //! * Face indices use the `u32` space; a file with more than 2^32 vertices is not
 //!   addressable.
-//! * Smoothing groups (`s`) are still not modelled, and `bind` knows nothing
-//!   about materials or groups: this is geometry plus shading, not a scene graph.
+//! * Smoothing groups are stored but **not interpreted**: [`Obj::smooth_groups`]
+//!   holds each `s` value as written, and `off`, `0` and `12` are simply three
+//!   different strings. `bind` likewise knows nothing about materials, groups or
+//!   smoothing: this is geometry plus shading, not a scene graph.
 //! * OBJ cannot clear an object or group any more than a material: a hand-built
 //!   face with `None` after one that had a value reads back with the earlier
 //!   value in effect.

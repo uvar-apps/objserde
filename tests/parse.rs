@@ -99,6 +99,40 @@ fn group_and_object_keywords_match_exactly() {
     assert_eq!(obj.faces[0].group, None);
 }
 
+/// `s` is state exactly like `o` and `g`: interned by value in order of first
+/// appearance, kept **as written** (so `off`, `0` and `12` are three different
+/// entries and nothing is interpreted), and absent until the file says it.
+#[test]
+fn smoothing_lines_are_state_for_the_faces_after_them() {
+    let src = "\
+v 0 0 0
+v 1 0 0
+v 0 1 0
+f 1 2 3
+s 12
+f 1 2 3
+s off
+f 1 2 3
+s 12
+f 1 2 3
+s
+f 1 2 3
+";
+    let obj = objserde::parse(src).unwrap();
+    assert_eq!(obj.smooth_groups, ["12", "off", ""]);
+    let values: Vec<Option<u32>> = obj.faces.iter().map(|f| f.smooth_group).collect();
+    assert_eq!(values, [None, Some(0), Some(1), Some(0), Some(2)]);
+    assert_eq!(obj.smooth_group_of(&obj.faces[2]), Some("off"));
+    assert_eq!(obj.smooth_group_of(&obj.faces[4]), Some(""));
+
+    // And the same exactness rule as the other keywords: `sl`, `s1`, a leading
+    // space or a tab are not smoothing lines.
+    let obj =
+        objserde::parse("v 0 0 0\nv 1 0 0\nv 0 1 0\nsl 1\ns1\n s 2\ns\t3\nf 1 2 3\n").unwrap();
+    assert!(obj.smooth_groups.is_empty(), "{:?}", obj.smooth_groups);
+    assert_eq!(obj.faces[0].smooth_group, None);
+}
+
 #[test]
 fn line_prefixes_match_exactly() {
     // A keyword needs its space; anything else is not a vertex line.

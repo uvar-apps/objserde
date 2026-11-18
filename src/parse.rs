@@ -1,9 +1,9 @@
 //! Layer 1: the loss-preserving parser.
 //!
 //! A plain std line scanner. Records are recognised by their exact line prefix
-//! — `v `, `vn `, `vt `, `f `, `usemtl `, `mtllib `, `o`, `g` — and the
+//! — `v `, `vn `, `vt `, `f `, `usemtl `, `mtllib `, `o`, `g`, `s` — and the
 //! comment lines before the first record are kept as the header. Everything
-//! else (later comments, `s`, blanks, unknown prefixes) is skipped: a reader
+//! else (later comments, `vp`, blanks, unknown prefixes) is skipped: a reader
 //! that dies on a record it does not model cannot read most OBJ files in the
 //! wild. Skipped lines are not stored, so they are **not** round-tripped; the
 //! crate docs carry the full contract.
@@ -94,16 +94,18 @@ pub fn parse(text: &str) -> Result<Obj, ObjError> {
     let mut obj = Obj::default();
     // Source line per face, kept only for the end-of-parse index check.
     let mut face_lines: Vec<usize> = Vec::new();
-    // The material, object and group in effect for faces that follow, as
-    // `usemtl`, `o` and `g` set them.
+    // The material, object, group and smoothing value in effect for faces that
+    // follow, as `usemtl`, `o`, `g` and `s` set them.
     let mut current_material: Option<u32> = None;
     let mut current_object: Option<u32> = None;
     let mut current_group: Option<u32> = None;
-    // Name → table index for `o` and `g`. A file may carry thousands of groups
+    let mut current_smooth: Option<u32> = None;
+    // Name → table index for `o`, `g` and `s`. A file may carry thousands of groups
     // (one per mesh component), so lookup is ordered rather than linear; a
     // BTreeMap keeps hashing out of the read path, and it is never iterated.
     let mut object_index: BTreeMap<String, u32> = BTreeMap::new();
     let mut group_index: BTreeMap<String, u32> = BTreeMap::new();
+    let mut smooth_index: BTreeMap<String, u32> = BTreeMap::new();
     // Comments are the header until the first line that is neither a comment
     // nor blank.
     let mut in_header = true;
@@ -124,6 +126,7 @@ pub fn parse(text: &str) -> Result<Obj, ObjError> {
                 face.material = current_material;
                 face.object = current_object;
                 face.group = current_group;
+                face.smooth_group = current_smooth;
                 obj.faces.push(face);
                 face_lines.push(line_no);
             }
@@ -145,8 +148,13 @@ pub fn parse(text: &str) -> Result<Obj, ObjError> {
             current_group = Some(intern(&mut obj.groups, &mut group_index, names));
         } else if let Some(name) = record_value(line, "o") {
             current_object = Some(intern(&mut obj.objects, &mut object_index, name));
+        } else if let Some(value) = record_value(line, "s") {
+            // Stored verbatim: `"off"`, `"0"`, `"12"`. What disables smoothing
+            // is a shading question; keeping the statement is a serialization
+            // one, and only the second one is this crate's job.
+            current_smooth = Some(intern(&mut obj.smooth_groups, &mut smooth_index, value));
         }
-        // Later comments, smoothing groups, unknown records: skipped, not fatal.
+        // Later comments, `vp`, curve bodies, unknown records: skipped, not fatal.
     }
 
     if obj.vertices.is_empty() {
@@ -257,6 +265,7 @@ fn read_face(line: usize, rest: &str, vertex_count: usize) -> Result<Option<Face
         material: None,
         object: None,
         group: None,
+        smooth_group: None,
     }))
 }
 
